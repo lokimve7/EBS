@@ -6,6 +6,8 @@ const sceneCountInput = document.querySelector("#scene-count-input");
 const stepperButtons = document.querySelectorAll("[data-stepper-action]");
 const generateScriptButton = document.querySelector("#generate-script-button");
 const generateButtonLabel = document.querySelector(".generate-button__label");
+const sceneCardList = document.querySelector("#scene-card-list");
+const sceneStatusBanner = document.querySelector("#scene-status-banner");
 const openApiKeyModalButton = document.querySelector("#open-api-key-modal-button");
 const apiKeyModal = document.querySelector("#api-key-modal");
 const apiKeyForm = document.querySelector("#api-key-form");
@@ -13,8 +15,8 @@ const apiKeyInputElements = document.querySelectorAll("[data-api-key-input]");
 const closeApiModalButtons = document.querySelectorAll("[data-close-api-modal]");
 const apiKeyVisibilityButtons = document.querySelectorAll("[data-toggle-api-visibility]");
 const apiKeyStorageKey = "ebsApiKeySettings";
-let generateButtonTimeoutId = null;
 let lastFocusedElement = null;
+let latestGeneratedScenes = [];
 
 /**
  * 선택된 탭에 맞춰 보이는 내용 영역만 전환한다.
@@ -79,27 +81,16 @@ function syncSceneCount(nextValue) {
 }
 
 /**
- * 스크립트 생성 버튼을 잠시 진행 중 상태로 바꿔 화면 반응을 보여준다.
+ * 스크립트 생성 버튼의 로딩 상태와 문구를 동기화한다.
  */
-function startGenerateButtonLoading() {
+function setGenerateButtonLoading(isLoading) {
   if (!generateScriptButton || !generateButtonLabel) {
     return;
   }
 
-  if (generateButtonTimeoutId) {
-    window.clearTimeout(generateButtonTimeoutId);
-  }
-
-  generateScriptButton.disabled = true;
-  generateScriptButton.classList.add("is-loading");
-  generateButtonLabel.textContent = "생성 중...";
-
-  generateButtonTimeoutId = window.setTimeout(() => {
-    generateScriptButton.disabled = false;
-    generateScriptButton.classList.remove("is-loading");
-    generateButtonLabel.textContent = "스크립트 생성";
-    generateButtonTimeoutId = null;
-  }, 1600);
+  generateScriptButton.disabled = isLoading;
+  generateScriptButton.classList.toggle("is-loading", isLoading);
+  generateButtonLabel.textContent = isLoading ? "생성 중..." : "스크립트 생성";
 }
 
 /**
@@ -205,6 +196,150 @@ function toggleApiKeyVisibility(buttonElement) {
   buttonElement.textContent = isPasswordType ? "숨김" : "보기";
 }
 
+/**
+ * 현재 입력된 스크립트 설정값을 생성 요청용 객체로 정리한다.
+ */
+function getScriptGenerationPayload() {
+  const selectedTone = document.querySelector("#tone-select");
+  const selectedStyle = document.querySelector("#style-select");
+
+  return {
+    topic: topicInput ? topicInput.value.trim() : "",
+    tone: selectedTone ? selectedTone.value : "",
+    style: selectedStyle ? selectedStyle.value : "",
+    sceneCount: sceneCountInput ? clampSceneCount(sceneCountInput.value) : 3,
+  };
+}
+
+/**
+ * 상태 배너 문구와 유형을 화면에 반영한다.
+ */
+function setSceneStatus(message, statusType) {
+  if (!sceneStatusBanner) {
+    return;
+  }
+
+  sceneStatusBanner.textContent = message;
+  sceneStatusBanner.dataset.status = statusType;
+}
+
+/**
+ * 장면 데이터를 현재 화면 카드 마크업으로 다시 그린다.
+ */
+function renderSceneCards(sceneItems) {
+  if (!sceneCardList) {
+    return;
+  }
+
+  latestGeneratedScenes = sceneItems.map((sceneItem) => ({ ...sceneItem }));
+
+  sceneCardList.innerHTML = sceneItems
+    .map((sceneItem, index) => {
+      const sceneNumber = String(index + 1).padStart(2, "0");
+
+      return `
+        <article class="scene-card">
+          <div class="scene-card__top">
+            <span class="scene-badge">SCENE ${sceneNumber}</span>
+            <div class="scene-meta">
+              <section class="scene-column">
+                <h3 class="scene-column__title">한글 설명</h3>
+                <div class="scene-text-box scene-text-box--scroll">
+                  <p>${escapeHtml(sceneItem.summary)}</p>
+                </div>
+              </section>
+              <section class="scene-column">
+                <h3 class="scene-column__title">한글 나레이션</h3>
+                <div class="scene-text-box">
+                  <p>${escapeHtml(sceneItem.narration)}</p>
+                </div>
+              </section>
+              <section class="scene-duration">
+                <h3 class="scene-column__title">영상 길이</h3>
+                <div class="duration-box">${sceneItem.durationSeconds}초</div>
+              </section>
+            </div>
+          </div>
+          <div class="scene-card__actions">
+            <button type="button" class="scene-action scene-action--edit">편집</button>
+            <button type="button" class="scene-action scene-action--retry">재생성</button>
+            <button type="button" class="scene-action scene-action--delete">삭제</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+/**
+ * 사용자 입력을 안전하게 HTML 텍스트로 변환한다.
+ */
+function escapeHtml(textValue) {
+  return String(textValue)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+/**
+ * OpenAI API 기반 장면 스크립트 생성을 요청하고 결과 카드를 갱신한다.
+ */
+async function generateScenesFromApi() {
+  const apiKeySettings = readStoredApiKeySettings();
+  const scriptPayload = getScriptGenerationPayload();
+
+  if (!scriptPayload.topic) {
+    setSceneStatus("영상 주제를 먼저 입력해 주세요.", "error");
+    topicInput?.focus();
+    return;
+  }
+
+  if (!apiKeySettings.openaiApiKey) {
+    setSceneStatus("OpenAI API 키를 먼저 설정해 주세요.", "error");
+    openApiKeyModal();
+    return;
+  }
+
+  setGenerateButtonLoading(true);
+  setSceneStatus("장면 스크립트를 생성하고 있습니다...", "loading");
+
+  try {
+    const response = await window.fetch("/api/script/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...scriptPayload,
+        openaiApiKey: apiKeySettings.openaiApiKey,
+      }),
+    });
+
+    const rawResponseText = await response.text();
+    let responseData = {};
+
+    try {
+      responseData = rawResponseText ? JSON.parse(rawResponseText) : {};
+    } catch (error) {
+      throw new Error(rawResponseText || "스크립트 생성 응답을 읽지 못했습니다.");
+    }
+
+    if (!response.ok) {
+      throw new Error(responseData.error || "스크립트 생성에 실패했습니다.");
+    }
+
+    const generatedScenes = Array.isArray(responseData.scenes) ? responseData.scenes : [];
+    renderSceneCards(generatedScenes);
+    setSceneStatus(`${generatedScenes.length}개의 장면 스크립트를 생성했습니다.`, "success");
+  } catch (error) {
+    setSceneStatus(error instanceof Error ? error.message : "스크립트 생성에 실패했습니다.", "error");
+  } finally {
+    setGenerateButtonLoading(false);
+  }
+}
+
 tabButtons.forEach((button) => {
   button.addEventListener("click", () => {
     activateTab(button.dataset.tabTarget);
@@ -242,7 +377,9 @@ if (sceneCountInput) {
 }
 
 if (generateScriptButton) {
-  generateScriptButton.addEventListener("click", startGenerateButtonLoading);
+  generateScriptButton.addEventListener("click", () => {
+    generateScenesFromApi();
+  });
 }
 
 if (openApiKeyModalButton) {

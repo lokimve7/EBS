@@ -518,6 +518,18 @@ button {
   font-weight: 700;
 }
 
+.status-banner[data-status="loading"] {
+  color: #67e7ff;
+}
+
+.status-banner[data-status="success"] {
+  color: #7dffb1;
+}
+
+.status-banner[data-status="error"] {
+  color: #ff8dc0;
+}
+
 .scene-builder {
   overflow: hidden;
 }
