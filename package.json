@@ -1,0 +1,9 @@
+{
+  "name": "ebs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI 협업 가상 제작 스튜디오 웹 프로젝트 기본 서버",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

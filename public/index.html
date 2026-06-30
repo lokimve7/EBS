@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 콘텐츠 스튜디오</title>
+    <link rel="stylesheet" href="/styles/main.css" />
+  </head>
+  <body>
+    <main class="studio-shell">
+      <header class="top-bar">
+        <div class="brand-group" aria-label="서비스 이름">
+          <div class="brand-mark" aria-hidden="true">
+            <span class="brand-mark__letter">A</span>
+          </div>
+          <strong class="brand-title">AI 콘텐츠 스튜디오</strong>
+        </div>
+        <div class="top-actions" aria-label="상단 버튼">
+          <button type="button" class="utility-button">
+            <span class="utility-button__icon" aria-hidden="true">↓</span>
+            <span>프로젝트 불러오기</span>
+          </button>
+          <button type="button" class="utility-button utility-button--accent">
+            <span class="utility-button__icon" aria-hidden="true">⟟</span>
+            <span>API 키 설정</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="tab-shell" aria-label="메인 탭">
+        <div class="tab-list" role="tablist" aria-label="콘텐츠 제작 단계">
+          <button type="button" class="tab-button is-active" role="tab" aria-selected="true" aria-controls="panel-script" id="tab-script" data-tab-target="script">
+            스크립트
+          </button>
+          <button type="button" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-image" id="tab-image" data-tab-target="image" tabindex="-1">
+            이미지
+          </button>
+          <button type="button" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-video" id="tab-video" data-tab-target="video" tabindex="-1">
+            영상
+          </button>
+          <button type="button" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-voice" id="tab-voice" data-tab-target="voice" tabindex="-1">
+            보이스
+          </button>
+          <button type="button" class="tab-button" role="tab" aria-selected="false" aria-controls="panel-mix" id="tab-mix" data-tab-target="mix" tabindex="-1">
+            조합
+          </button>
+        </div>
+      </section>
+
+      <section class="content-shell">
+        <section class="content-panel is-active" id="panel-script" role="tabpanel" aria-labelledby="tab-script" data-tab-panel="script">
+          <div class="script-workspace">
+            <section class="script-settings panel-box" aria-labelledby="script-settings-title">
+              <header class="section-heading">
+                <span class="section-heading__icon" aria-hidden="true">▤</span>
+                <h2 class="section-heading__title" id="script-settings-title">스크립트 설정</h2>
+              </header>
+
+              <form class="field-stack" id="script-settings-form">
+                <div class="form-field">
+                  <label class="form-field__label" for="topic-input">영상 주제</label>
+                  <div class="text-input-box">
+                    <textarea
+                      class="text-input-box__control"
+                      id="topic-input"
+                      name="topic"
+                      rows="3"
+                      maxlength="500"
+                      placeholder="예: 2026년 강릉 여행 브이로그"
+                    >2026년 강릉 여행</textarea>
+                    <span class="text-input-box__count" id="topic-count">11 / 500</span>
+                  </div>
+                </div>
+
+                <div class="form-field">
+                  <label class="form-field__label" for="tone-select">분위기</label>
+                  <div class="select-field">
+                    <select class="select-field__control" id="tone-select" name="tone">
+                      <option value="감동적">감동적</option>
+                      <option value="신나는" selected>신나는</option>
+                      <option value="유머러스">유머러스</option>
+                    </select>
+                    <span class="select-field__arrow" aria-hidden="true">⌄</span>
+                  </div>
+                </div>
+
+                <div class="form-field">
+                  <label class="form-field__label" for="style-select">스타일</label>
+                  <div class="select-field">
+                    <select class="select-field__control" id="style-select" name="style">
+                      <option value="다큐">다큐</option>
+                      <option value="브이로그" selected>브이로그</option>
+                      <option value="광고">광고</option>
+                    </select>
+                    <span class="select-field__arrow" aria-hidden="true">⌄</span>
+                  </div>
+                </div>
+
+                <div class="form-field">
+                  <label class="form-field__label" for="scene-count-input">장면 수</label>
+                  <div class="scene-count-row" aria-label="장면 수 선택">
+                    <div class="stepper-field">
+                      <button type="button" class="stepper-field__button" data-stepper-action="decrease" aria-label="장면 수 줄이기">−</button>
+                      <input
+                        class="stepper-field__input"
+                        id="scene-count-input"
+                        name="sceneCount"
+                        type="number"
+                        min="3"
+                        max="10"
+                        value="3"
+                        inputmode="numeric"
+                      />
+                      <button type="button" class="stepper-field__button" data-stepper-action="increase" aria-label="장면 수 늘리기">＋</button>
+                    </div>
+                    <span class="scene-count-row__hint">(3 ~ 10)</span>
+                  </div>
+                </div>
+              </form>
+
+              <button type="button" class="generate-button" id="generate-script-button" aria-live="polite">
+                <span class="generate-button__spinner" aria-hidden="true"></span>
+                <span class="generate-button__label">스크립트 생성</span>
+              </button>
+            </section>
+
+            <section class="scene-builder panel-box" aria-labelledby="scene-builder-title">
+              <header class="section-heading">
+                <span class="section-heading__icon section-heading__icon--spark" aria-hidden="true">✦</span>
+                <h2 class="section-heading__title" id="scene-builder-title">장면 구성</h2>
+              </header>
+
+              <div class="status-banner">마지막 스크립트 작업 상태를 불러왔습니다.</div>
+
+              <div class="scene-card-list" aria-label="장면 카드 목록">
+                <article class="scene-card">
+                  <div class="scene-card__top">
+                    <span class="scene-badge">SCENE 01</span>
+                    <div class="scene-meta">
+                      <section class="scene-column">
+                        <h3 class="scene-column__title">한글 설명</h3>
+                        <div class="scene-text-box scene-text-box--scroll">
+                          <p>강릉역 앞, 캐리어를 끌고 나온 주인공이 바닷바람을 맞으며 카메라를 향해 환하게 손을 흔든다. 역 주변은 여행객들로 활기차고, 첫 출발의 설렘이 가득한 톤으로 보인다.</p>
+                        </div>
+                      </section>
+                      <section class="scene-column">
+                        <h3 class="scene-column__title">한글 나레이션</h3>
+                        <div class="scene-text-box">
+                          <p>2026 강릉 여행, 지금 바로 출발!</p>
+                        </div>
+                      </section>
+                      <section class="scene-duration">
+                        <h3 class="scene-column__title">영상 길이</h3>
+                        <div class="duration-box">3초</div>
+                      </section>
+                    </div>
+                  </div>
+                  <div class="scene-card__actions">
+                    <button type="button" class="scene-action scene-action--edit">편집</button>
+                    <button type="button" class="scene-action scene-action--retry">재생성</button>
+                    <button type="button" class="scene-action scene-action--delete">삭제</button>
+                  </div>
+                </article>
+
+                <article class="scene-card">
+                  <div class="scene-card__top">
+                    <span class="scene-badge">SCENE 02</span>
+                    <div class="scene-meta">
+                      <section class="scene-column">
+                        <h3 class="scene-column__title">한글 설명</h3>
+                        <div class="scene-text-box scene-text-box--scroll">
+                          <p>안목해변 카페거리에서 주인공이 테이크아웃 커피를 받아 들자마자 끝쪽 끝 파란 바다를 바라본다. 테라스 난간 옆에서 발걸음을 옮기며 카메라에 신나게 따라오라고 손짓한다.</p>
+                        </div>
+                      </section>
+                      <section class="scene-column">
+                        <h3 class="scene-column__title">한글 나레이션</h3>
+                        <div class="scene-text-box">
+                          <p>바다 보인다, 바로 뛰자!</p>
+                        </div>
+                      </section>
+                      <section class="scene-duration">
+                        <h3 class="scene-column__title">영상 길이</h3>
+                        <div class="duration-box">4초</div>
+                      </section>
+                    </div>
+                  </div>
+                  <div class="scene-card__actions">
+                    <button type="button" class="scene-action scene-action--edit">편집</button>
+                    <button type="button" class="scene-action scene-action--retry">재생성</button>
+                    <button type="button" class="scene-action scene-action--delete">삭제</button>
+                  </div>
+                </article>
+
+                <article class="scene-card">
+                  <div class="scene-card__top">
+                    <span class="scene-badge">SCENE 03</span>
+                    <div class="scene-meta">
+                      <section class="scene-column">
+                        <h3 class="scene-column__title">한글 설명</h3>
+                        <div class="scene-text-box scene-text-box--scroll">
+                          <p>주문진 방파제 근처 노을빛 아래, 주인공이 회와 해산물이 놓인 작은 야외 테이블 앞에 서서 엄지를 치켜든다. 하루를 꽉 채운 강릉 여행의 마무리가 따뜻하고 신나게 이어진다.</p>
+                        </div>
+                      </section>
+                      <section class="scene-column">
+                        <h3 class="scene-column__title">한글 나레이션</h3>
+                        <div class="scene-text-box">
+                          <p>강릉은 마지막 한 입까지 완전 성공!</p>
+                        </div>
+                      </section>
+                      <section class="scene-duration">
+                        <h3 class="scene-column__title">영상 길이</h3>
+                        <div class="duration-box">5초</div>
+                      </section>
+                    </div>
+                  </div>
+                  <div class="scene-card__actions">
+                    <button type="button" class="scene-action scene-action--edit">편집</button>
+                    <button type="button" class="scene-action scene-action--retry">재생성</button>
+                    <button type="button" class="scene-action scene-action--delete">삭제</button>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </div>
+        </section>
+        <section class="content-panel" id="panel-image" role="tabpanel" aria-labelledby="tab-image" data-tab-panel="image" hidden></section>
+        <section class="content-panel" id="panel-video" role="tabpanel" aria-labelledby="tab-video" data-tab-panel="video" hidden></section>
+        <section class="content-panel" id="panel-voice" role="tabpanel" aria-labelledby="tab-voice" data-tab-panel="voice" hidden></section>
+        <section class="content-panel" id="panel-mix" role="tabpanel" aria-labelledby="tab-mix" data-tab-panel="mix" hidden></section>
+      </section>
+    </main>
+    <script src="/scripts/main.js"></script>
+  </body>
+</html>
