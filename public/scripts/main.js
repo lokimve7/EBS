@@ -6,7 +6,15 @@ const sceneCountInput = document.querySelector("#scene-count-input");
 const stepperButtons = document.querySelectorAll("[data-stepper-action]");
 const generateScriptButton = document.querySelector("#generate-script-button");
 const generateButtonLabel = document.querySelector(".generate-button__label");
+const openApiKeyModalButton = document.querySelector("#open-api-key-modal-button");
+const apiKeyModal = document.querySelector("#api-key-modal");
+const apiKeyForm = document.querySelector("#api-key-form");
+const apiKeyInputElements = document.querySelectorAll("[data-api-key-input]");
+const closeApiModalButtons = document.querySelectorAll("[data-close-api-modal]");
+const apiKeyVisibilityButtons = document.querySelectorAll("[data-toggle-api-visibility]");
+const apiKeyStorageKey = "ebsApiKeySettings";
 let generateButtonTimeoutId = null;
+let lastFocusedElement = null;
 
 /**
  * 선택된 탭에 맞춰 보이는 내용 영역만 전환한다.
@@ -94,6 +102,109 @@ function startGenerateButtonLoading() {
   }, 1600);
 }
 
+/**
+ * 브라우저 저장소에 보관된 API 키 입력값을 읽어온다.
+ */
+function readStoredApiKeySettings() {
+  try {
+    const storedValue = window.localStorage.getItem(apiKeyStorageKey);
+
+    if (!storedValue) {
+      return {};
+    }
+
+    const parsedValue = JSON.parse(storedValue);
+    return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+/**
+ * 현재 폼의 API 키 값을 브라우저 저장소에 저장한다.
+ */
+function saveApiKeySettings() {
+  if (!apiKeyForm) {
+    return;
+  }
+
+  const formData = new FormData(apiKeyForm);
+  const nextSettings = {};
+
+  for (const [fieldName, fieldValue] of formData.entries()) {
+    nextSettings[fieldName] = String(fieldValue);
+  }
+
+  window.localStorage.setItem(apiKeyStorageKey, JSON.stringify(nextSettings));
+}
+
+/**
+ * 저장된 API 키 값을 모달 입력칸에 반영한다.
+ */
+function syncApiKeyInputsFromStorage() {
+  const storedSettings = readStoredApiKeySettings();
+
+  apiKeyInputElements.forEach((inputElement) => {
+    inputElement.value = storedSettings[inputElement.name] || "";
+    inputElement.type = "password";
+  });
+
+  apiKeyVisibilityButtons.forEach((buttonElement) => {
+    buttonElement.textContent = "보기";
+  });
+}
+
+/**
+ * API 키 설정 모달을 열고 첫 번째 입력칸에 초점을 맞춘다.
+ */
+function openApiKeyModal() {
+  if (!apiKeyModal) {
+    return;
+  }
+
+  lastFocusedElement = document.activeElement;
+  syncApiKeyInputsFromStorage();
+  apiKeyModal.hidden = false;
+  document.body.classList.add("modal-open");
+
+  const firstInput = apiKeyModal.querySelector("[data-api-key-input]");
+
+  if (firstInput) {
+    firstInput.focus();
+  }
+}
+
+/**
+ * API 키 설정 모달을 닫고 이전 포커스로 되돌린다.
+ */
+function closeApiKeyModal() {
+  if (!apiKeyModal) {
+    return;
+  }
+
+  apiKeyModal.hidden = true;
+  document.body.classList.remove("modal-open");
+
+  if (lastFocusedElement instanceof HTMLElement) {
+    lastFocusedElement.focus();
+  }
+}
+
+/**
+ * 입력칸의 API 키 마스킹 상태를 전환한다.
+ */
+function toggleApiKeyVisibility(buttonElement) {
+  const inputElement = buttonElement.closest(".api-key-input-box")?.querySelector("[data-api-key-input]");
+
+  if (!inputElement) {
+    return;
+  }
+
+  const isPasswordType = inputElement.type === "password";
+  inputElement.type = isPasswordType ? "text" : "password";
+  buttonElement.textContent = isPasswordType ? "숨김" : "보기";
+}
+
 tabButtons.forEach((button) => {
   button.addEventListener("click", () => {
     activateTab(button.dataset.tabTarget);
@@ -133,5 +244,33 @@ if (sceneCountInput) {
 if (generateScriptButton) {
   generateScriptButton.addEventListener("click", startGenerateButtonLoading);
 }
+
+if (openApiKeyModalButton) {
+  openApiKeyModalButton.addEventListener("click", openApiKeyModal);
+}
+
+closeApiModalButtons.forEach((button) => {
+  button.addEventListener("click", closeApiKeyModal);
+});
+
+if (apiKeyForm) {
+  apiKeyForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveApiKeySettings();
+    closeApiKeyModal();
+  });
+}
+
+apiKeyVisibilityButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    toggleApiKeyVisibility(button);
+  });
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && apiKeyModal && !apiKeyModal.hidden) {
+    closeApiKeyModal();
+  }
+});
 
 activateTab("script");

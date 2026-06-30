@@ -20,7 +20,13 @@
             <span class="utility-button__icon" aria-hidden="true">↓</span>
             <span>프로젝트 불러오기</span>
           </button>
-          <button type="button" class="utility-button utility-button--accent">
+          <button
+            type="button"
+            class="utility-button utility-button--accent"
+            id="open-api-key-modal-button"
+            aria-haspopup="dialog"
+            aria-controls="api-key-modal"
+          >
             <span class="utility-button__icon" aria-hidden="true">⟟</span>
             <span>API 키 설정</span>
           </button>
@@ -229,6 +235,124 @@
         <section class="content-panel" id="panel-mix" role="tabpanel" aria-labelledby="tab-mix" data-tab-panel="mix" hidden></section>
       </section>
     </main>
+
+    <div class="modal-layer" id="api-key-modal" hidden>
+      <div class="modal-backdrop" data-close-api-modal></div>
+      <section
+        class="api-key-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="api-key-modal-title"
+        aria-describedby="api-key-modal-description"
+      >
+        <header class="api-key-modal__header">
+          <div class="api-key-modal__title-group">
+            <span class="api-key-modal__title-icon" aria-hidden="true">⟟</span>
+            <div>
+              <h2 class="api-key-modal__title" id="api-key-modal-title">API 키 설정</h2>
+              <p class="api-key-modal__description" id="api-key-modal-description">각 서비스의 API 키를 입력하고 저장하세요.</p>
+            </div>
+          </div>
+          <button type="button" class="api-key-modal__close" aria-label="API 키 설정 창 닫기" data-close-api-modal>
+            ×
+          </button>
+        </header>
+
+        <form class="api-key-form" id="api-key-form">
+          <article class="api-key-card">
+            <div class="api-key-card__brand api-key-card__brand--openai" aria-hidden="true">◎</div>
+            <div class="api-key-card__body">
+              <div class="api-key-card__top">
+                <div>
+                  <h3 class="api-key-card__title">OpenAI API Key</h3>
+                  <p class="api-key-card__text">GPT-4o 모델 등 OpenAI 서비스를 사용하기 위한 API 키를 입력하세요.</p>
+                </div>
+                <a class="api-key-card__link" href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer">API 키 발급 방법</a>
+              </div>
+              <label class="api-key-input-box" for="openai-api-key-input">
+                <input
+                  class="api-key-input-box__control"
+                  id="openai-api-key-input"
+                  name="openaiApiKey"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="sk-..."
+                  data-api-key-input
+                />
+                <button type="button" class="api-key-input-box__toggle" aria-label="OpenAI API 키 보기 전환" data-toggle-api-visibility>
+                  보기
+                </button>
+              </label>
+            </div>
+          </article>
+
+          <article class="api-key-card">
+            <div class="api-key-card__brand api-key-card__brand--kling" aria-hidden="true">K</div>
+            <div class="api-key-card__body">
+              <div class="api-key-card__top">
+                <div>
+                  <h3 class="api-key-card__title">KlingAI API Key</h3>
+                  <p class="api-key-card__text">KlingAI 서비스로 영상 생성을 위해 API 키를 입력하세요.</p>
+                </div>
+                <a class="api-key-card__link" href="https://app.klingai.com/" target="_blank" rel="noreferrer">API 키 발급 방법</a>
+              </div>
+              <label class="api-key-input-box" for="kling-api-key-input">
+                <input
+                  class="api-key-input-box__control"
+                  id="kling-api-key-input"
+                  name="klingApiKey"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="kling-..."
+                  data-api-key-input
+                />
+                <button type="button" class="api-key-input-box__toggle" aria-label="KlingAI API 키 보기 전환" data-toggle-api-visibility>
+                  보기
+                </button>
+              </label>
+            </div>
+          </article>
+
+          <article class="api-key-card">
+            <div class="api-key-card__brand api-key-card__brand--eleven" aria-hidden="true">11</div>
+            <div class="api-key-card__body">
+              <div class="api-key-card__top">
+                <div>
+                  <h3 class="api-key-card__title">ElevenLabs API Key</h3>
+                  <p class="api-key-card__text">ElevenLabs 서비스로 음성 생성을 위해 API 키를 입력하세요.</p>
+                </div>
+                <a class="api-key-card__link" href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer">API 키 발급 방법</a>
+              </div>
+              <label class="api-key-input-box" for="elevenlabs-api-key-input">
+                <input
+                  class="api-key-input-box__control"
+                  id="elevenlabs-api-key-input"
+                  name="elevenlabsApiKey"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="elevenlabs-..."
+                  data-api-key-input
+                />
+                <button type="button" class="api-key-input-box__toggle" aria-label="ElevenLabs API 키 보기 전환" data-toggle-api-visibility>
+                  보기
+                </button>
+              </label>
+            </div>
+          </article>
+        </form>
+
+        <footer class="api-key-modal__footer">
+          <p class="api-key-modal__note">입력된 API 키는 이 브라우저에 저장되며, 현재 단계에서는 외부로 전송되지 않습니다.</p>
+          <div class="api-key-modal__actions">
+            <button type="button" class="modal-action-button" data-close-api-modal>취소</button>
+            <button type="submit" class="modal-action-button modal-action-button--primary" form="api-key-form">저장</button>
+          </div>
+        </footer>
+      </section>
+    </div>
     <script src="/scripts/main.js"></script>
   </body>
 </html>
