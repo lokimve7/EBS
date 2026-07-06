@@ -8,6 +8,7 @@ const generateScriptButton = document.querySelector("#generate-script-button");
 const generateButtonLabel = document.querySelector(".generate-button__label");
 const sceneCardList = document.querySelector("#scene-card-list");
 const imageSceneRail = document.querySelector("#image-scene-rail");
+const videoSceneRail = document.querySelector("#video-scene-rail");
 const sceneStatusBanner = document.querySelector("#scene-status-banner");
 const openProjectFileButton = document.querySelector("#open-project-file-button");
 const projectFileInput = document.querySelector("#project-file-input");
@@ -585,6 +586,7 @@ function renderSceneCards(sceneItems) {
     .join("");
 
   renderImageSceneCards(latestGeneratedScenes);
+  renderVideoSceneCards(latestGeneratedScenes);
 }
 
 /**
@@ -663,6 +665,45 @@ function renderImageSceneCards(sceneItems) {
             <button type="button" class="image-action-button image-action-button--icon" aria-label="${sceneOrderLabel} 장면 다운로드">↓</button>
           </div>
           ${sceneItem.generatedImagePath ? `<p class="image-scene-card__saved-path">${escapeHtml(sceneItem.generatedImagePath)}</p>` : ""}
+        </article>
+      `;
+    })
+    .join("");
+}
+
+/**
+ * 장면 데이터를 비디오 탭 카드 마크업으로 다시 그린다.
+ */
+function renderVideoSceneCards(sceneItems) {
+  if (!videoSceneRail) {
+    return;
+  }
+
+  videoSceneRail.innerHTML = sceneItems
+    .map((sceneItem, index) => {
+      const sceneNumber = String(index + 1).padStart(2, "0");
+      const sceneOrderLabel = getSceneOrderLabel(index);
+
+      return `
+        <article class="video-scene-card">
+          <div class="video-scene-card__header">
+            <span class="video-scene-badge">SCENE ${sceneNumber}</span>
+          </div>
+          <p class="video-scene-card__description">${escapeHtml(sceneItem.summary)}</p>
+          <div class="video-preview video-preview--empty" aria-label="${sceneOrderLabel} 장면 영상 없음">
+            <div class="video-preview__chrome" aria-hidden="true">
+              <span class="video-preview__play-icon">▶</span>
+              <span class="video-preview__timeline"></span>
+              <span class="video-preview__timecode">0:00 / 0:05</span>
+            </div>
+            <span class="video-preview__placeholder-icon" aria-hidden="true">▷</span>
+            <p class="video-preview__placeholder-text">영상이 생성되지 않았습니다.</p>
+          </div>
+          <div class="video-scene-card__actions" aria-label="${sceneOrderLabel} 장면 영상 버튼">
+            <button type="button" class="video-action-button video-action-button--primary">✦ 영상 생성</button>
+            <button type="button" class="video-action-button video-action-button--icon" aria-label="${sceneOrderLabel} 장면 다시 생성">↻</button>
+            <button type="button" class="video-action-button video-action-button--icon" aria-label="${sceneOrderLabel} 장면 다운로드">↓</button>
+          </div>
         </article>
       `;
     })
@@ -965,4 +1006,5 @@ window.addEventListener("keydown", (event) => {
 
 latestGeneratedScenes = collectScenesFromMarkup().map((sceneItem) => normalizeSceneItem(sceneItem));
 renderImageSceneCards(latestGeneratedScenes);
+renderVideoSceneCards(latestGeneratedScenes);
 activateTab("script");
