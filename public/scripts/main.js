@@ -273,6 +273,7 @@ function normalizeSceneItem(sceneItem) {
   const generatedImageWebPath = sceneItem?.generatedImageWebPath || "";
   const generatedImageDataUrl = sceneItem?.generatedImageDataUrl || "";
   const hasGeneratedImage = Boolean(generatedImageDataUrl || generatedImageWebPath);
+  const generatedVideoWebPath = sceneItem?.generatedVideoWebPath || "";
 
   return {
     ...sceneItem,
@@ -281,6 +282,9 @@ function normalizeSceneItem(sceneItem) {
     generatedImageDataUrl,
     generatedImagePath: sceneItem?.generatedImagePath || "",
     generatedImageWebPath,
+    videoStatus: sceneItem?.videoStatus || (generatedVideoWebPath ? "success" : "idle"),
+    videoError: sceneItem?.videoError || "",
+    generatedVideoWebPath,
   };
 }
 
@@ -300,6 +304,25 @@ function updateSceneImageState(sceneIndex, nextState) {
   };
 
   renderImageSceneCards(latestGeneratedScenes);
+  renderVideoSceneCards(latestGeneratedScenes);
+}
+
+/**
+ * 특정 장면의 영상 상태만 부분 갱신한다.
+ */
+function updateSceneVideoState(sceneIndex, nextState) {
+  const targetScene = latestGeneratedScenes[sceneIndex];
+
+  if (!targetScene) {
+    return;
+  }
+
+  latestGeneratedScenes[sceneIndex] = {
+    ...targetScene,
+    ...nextState,
+  };
+
+  renderVideoSceneCards(latestGeneratedScenes);
 }
 
 /**
@@ -413,23 +436,32 @@ async function readProjectScriptFile(projectPayload) {
  */
 function mergeProjectImageState(sceneItems, projectPayload) {
   const imageItems = Array.isArray(projectPayload.images) ? projectPayload.images : [];
+  const videoItems = Array.isArray(projectPayload.videos) ? projectPayload.videos : [];
 
   return sceneItems.map((sceneItem, sceneIndex) => {
     const matchedImageItem = imageItems.find((imageItem) => imageItem?.sceneIndex === sceneIndex);
+    const matchedVideoItem = videoItems.find((videoItem) => videoItem?.sceneIndex === sceneIndex);
 
-    if (!matchedImageItem || typeof matchedImageItem.filePath !== "string" || !matchedImageItem.filePath.trim()) {
-      return normalizeSceneItem(sceneItem);
-    }
+    const nextSceneItem = { ...sceneItem };
 
-    return normalizeSceneItem({
-      ...sceneItem,
-      imageStatus: "success",
-      generatedImagePath: matchedImageItem.filePath,
-      generatedImageWebPath: createProjectAssetWebPath(
+    if (matchedImageItem && typeof matchedImageItem.filePath === "string" && matchedImageItem.filePath.trim()) {
+      nextSceneItem.imageStatus = "success";
+      nextSceneItem.generatedImagePath = matchedImageItem.filePath;
+      nextSceneItem.generatedImageWebPath = createProjectAssetWebPath(
         projectPayload.projectFolderName,
         matchedImageItem.filePath
-      ),
-    });
+      );
+    }
+
+    if (matchedVideoItem && typeof matchedVideoItem.filePath === "string" && matchedVideoItem.filePath.trim()) {
+      nextSceneItem.videoStatus = "success";
+      nextSceneItem.generatedVideoWebPath = createProjectAssetWebPath(
+        projectPayload.projectFolderName,
+        matchedVideoItem.filePath
+      );
+    }
+
+    return normalizeSceneItem(nextSceneItem);
   });
 }
 
@@ -453,7 +485,13 @@ function detectProjectFileKind(projectPayload) {
       typeof sceneItem?.imageStatus === "string"
   );
 
-  return hasEmbeddedImageState ? "legacy-project-state" : "script-only";
+  const hasEmbeddedVideoState = sceneItems.some(
+    (sceneItem) =>
+      typeof sceneItem?.generatedVideoWebPath === "string" ||
+      typeof sceneItem?.videoStatus === "string"
+  );
+
+  return hasEmbeddedImageState || hasEmbeddedVideoState ? "legacy-project-state" : "script-only";
 }
 
 /**
@@ -518,13 +556,13 @@ async function importProjectFile(fileObject) {
     const projectName = typeof projectPayload.projectTopic === "string" && projectPayload.projectTopic.trim()
       ? projectPayload.projectTopic.trim()
       : fileObject.name;
-    const hasRestorableImageState = projectFileKind === "project-state" || projectFileKind === "legacy-project-state";
+    const hasRestorableMediaState = projectFileKind === "project-state" || projectFileKind === "legacy-project-state";
 
     setSceneStatus(
-      hasRestorableImageState
-        ? `${projectName} 프로젝트의 장면 ${sceneItems.length}개와 이미지 상태를 불러왔습니다.`
-        : `${projectName} 스크립트 파일을 불러왔습니다. 이 파일에는 이미지 복원 상태가 없어 이미지 탭은 기본 상태로 표시됩니다.`,
-      hasRestorableImageState ? "success" : "loading"
+      hasRestorableMediaState
+        ? `${projectName} 프로젝트의 장면 ${sceneItems.length}개와 이미지·영상 상태를 불러왔습니다.`
+        : `${projectName} 스크립트 파일을 불러왔습니다. 이 파일에는 이미지·영상 복원 상태가 없어 탭은 기본 상태로 표시됩니다.`,
+      hasRestorableMediaState ? "success" : "loading"
     );
   } catch (error) {
     setSceneStatus(
@@ -672,6 +710,49 @@ function renderImageSceneCards(sceneItems) {
 }
 
 /**
+ * 비디오 카드 미리보기 영역 마크업을 현재 상태에 맞춰 반환한다.
+ */
+function renderVideoPreviewMarkup(sceneItem, sceneOrderLabel) {
+  if (sceneItem.videoStatus === "loading") {
+    return `
+      <div class="video-preview video-preview--loading" aria-label="${sceneOrderLabel} 장면 영상 생성 중">
+        <span class="video-preview__loading-spinner" aria-hidden="true"></span>
+        <p class="video-preview__loading-text">영상을 생성하고 있습니다.</p>
+      </div>
+    `;
+  }
+
+  if (sceneItem.generatedVideoWebPath) {
+    return `
+      <div class="video-preview video-preview--result" aria-label="${sceneOrderLabel} 장면 생성 영상">
+        <video class="video-preview__player" src="${sceneItem.generatedVideoWebPath}" controls preload="metadata"></video>
+      </div>
+    `;
+  }
+
+  if (sceneItem.videoStatus === "error") {
+    return `
+      <div class="video-preview video-preview--empty video-preview--error" aria-label="${sceneOrderLabel} 장면 영상 생성 실패">
+        <span class="video-preview__placeholder-icon" aria-hidden="true">!</span>
+        <p class="video-preview__placeholder-text">${escapeHtml(sceneItem.videoError || "영상 생성에 실패했습니다.")}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="video-preview video-preview--empty" aria-label="${sceneOrderLabel} 장면 영상 없음">
+      <div class="video-preview__chrome" aria-hidden="true">
+        <span class="video-preview__play-icon">▶</span>
+        <span class="video-preview__timeline"></span>
+        <span class="video-preview__timecode">0:00 / 0:05</span>
+      </div>
+      <span class="video-preview__placeholder-icon" aria-hidden="true">▷</span>
+      <p class="video-preview__placeholder-text">영상이 생성되지 않았습니다.</p>
+    </div>
+  `;
+}
+
+/**
  * 장면 데이터를 비디오 탭 카드 마크업으로 다시 그린다.
  */
 function renderVideoSceneCards(sceneItems) {
@@ -685,22 +766,22 @@ function renderVideoSceneCards(sceneItems) {
       const sceneOrderLabel = getSceneOrderLabel(index);
 
       return `
-        <article class="video-scene-card">
+        <article class="video-scene-card${sceneItem.videoStatus === "loading" ? " is-loading" : ""}">
           <div class="video-scene-card__header">
             <span class="video-scene-badge">SCENE ${sceneNumber}</span>
           </div>
           <p class="video-scene-card__description">${escapeHtml(sceneItem.summary)}</p>
-          <div class="video-preview video-preview--empty" aria-label="${sceneOrderLabel} 장면 영상 없음">
-            <div class="video-preview__chrome" aria-hidden="true">
-              <span class="video-preview__play-icon">▶</span>
-              <span class="video-preview__timeline"></span>
-              <span class="video-preview__timecode">0:00 / 0:05</span>
-            </div>
-            <span class="video-preview__placeholder-icon" aria-hidden="true">▷</span>
-            <p class="video-preview__placeholder-text">영상이 생성되지 않았습니다.</p>
-          </div>
+          ${renderVideoPreviewMarkup(sceneItem, sceneOrderLabel)}
           <div class="video-scene-card__actions" aria-label="${sceneOrderLabel} 장면 영상 버튼">
-            <button type="button" class="video-action-button video-action-button--primary">✦ 영상 생성</button>
+            <button
+              type="button"
+              class="video-action-button video-action-button--primary"
+              data-video-generate-button
+              data-scene-index="${index}"
+              ${sceneItem.videoStatus === "loading" ? "disabled" : ""}
+            >
+              ${sceneItem.videoStatus === "loading" ? "생성 중..." : "✦ 영상 생성"}
+            </button>
             <button type="button" class="video-action-button video-action-button--icon" aria-label="${sceneOrderLabel} 장면 다시 생성">↻</button>
             <button type="button" class="video-action-button video-action-button--icon" aria-label="${sceneOrderLabel} 장면 다운로드">↓</button>
           </div>
@@ -729,6 +810,111 @@ function createImageDataUrl(imageBase64, outputFormat) {
   const normalizedFormat = outputFormat === "jpeg" ? "jpeg" : "png";
 
   return `data:image/${normalizedFormat};base64,${imageBase64}`;
+}
+
+/**
+ * 특정 장면의 영상을 EvoLink Kling API로 생성하고 카드 상태를 갱신한다.
+ */
+async function generateVideoForScene(sceneIndex) {
+  const sceneItem = latestGeneratedScenes[sceneIndex];
+  const apiKeySettings = readStoredApiKeySettings();
+  const activeTopic = currentProjectInfo.topic || (topicInput ? topicInput.value.trim() : "");
+  const sourceImagePath = sceneItem?.generatedImagePath || "";
+
+  if (!sceneItem) {
+    return;
+  }
+
+  if (!sceneItem.videoPrompt) {
+    updateSceneVideoState(sceneIndex, {
+      videoStatus: "error",
+      videoError: "영상 생성용 프롬프트가 아직 없습니다. 먼저 스크립트를 생성해 주세요.",
+      generatedVideoWebPath: "",
+    });
+    activateTab("video");
+    return;
+  }
+
+  if (!sourceImagePath) {
+    updateSceneVideoState(sceneIndex, {
+      videoStatus: "error",
+      videoError: "먼저 이 장면의 이미지를 생성해 주세요.",
+      generatedVideoWebPath: "",
+    });
+    activateTab("video");
+    return;
+  }
+
+  if (!activeTopic) {
+    updateSceneVideoState(sceneIndex, {
+      videoStatus: "error",
+      videoError: "프로젝트 주제를 확인할 수 없습니다. 먼저 스크립트를 생성하거나 프로젝트를 불러와 주세요.",
+      generatedVideoWebPath: "",
+    });
+    return;
+  }
+
+  if (!apiKeySettings.klingApiKey) {
+    setSceneStatus("EvoLink.AI API 키를 먼저 설정해 주세요.", "error");
+    openApiKeyModal();
+    return;
+  }
+
+  syncCurrentProjectInfo(activeTopic, currentProjectInfo.folderName);
+  updateSceneVideoState(sceneIndex, {
+    videoStatus: "loading",
+    videoError: "",
+  });
+
+  try {
+    const response = await window.fetch("/api/video/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        topic: activeTopic,
+        projectFolderName: currentProjectInfo.folderName,
+        sceneIndex,
+        videoPrompt: sceneItem.videoPrompt,
+        sourceImagePath,
+        klingApiKey: apiKeySettings.klingApiKey,
+      }),
+    });
+
+    const rawResponseText = await response.text();
+    let responseData = {};
+
+    try {
+      responseData = rawResponseText ? JSON.parse(rawResponseText) : {};
+    } catch (error) {
+      throw new Error(rawResponseText || "영상 생성 응답을 읽지 못했습니다.");
+    }
+
+    if (!response.ok) {
+      throw new Error(responseData.error || "영상 생성에 실패했습니다.");
+    }
+
+    const generatedVideoWebPath = typeof responseData.video?.webPath === "string" ? responseData.video.webPath : "";
+
+    if (!generatedVideoWebPath) {
+      throw new Error("생성된 영상 URL을 읽지 못했습니다.");
+    }
+
+    updateSceneVideoState(sceneIndex, {
+      videoStatus: "success",
+      videoError: "",
+      generatedVideoWebPath,
+    });
+
+    setSceneStatus(`SCENE ${String(sceneIndex + 1).padStart(2, "0")} 영상 생성을 완료했습니다.`, "success");
+  } catch (error) {
+    updateSceneVideoState(sceneIndex, {
+      videoStatus: "error",
+      videoError: error instanceof Error ? error.message : "영상 생성에 실패했습니다.",
+      generatedVideoWebPath: "",
+    });
+  }
 }
 
 /**
@@ -955,6 +1141,26 @@ if (imageSceneRail) {
     }
 
     generateImageForScene(sceneIndex);
+  });
+}
+
+if (videoSceneRail) {
+  videoSceneRail.addEventListener("click", (event) => {
+    const generateButton = event.target instanceof HTMLElement
+      ? event.target.closest("[data-video-generate-button]")
+      : null;
+
+    if (!generateButton) {
+      return;
+    }
+
+    const sceneIndex = Number.parseInt(generateButton.dataset.sceneIndex || "", 10);
+
+    if (Number.isNaN(sceneIndex)) {
+      return;
+    }
+
+    generateVideoForScene(sceneIndex);
   });
 }
 

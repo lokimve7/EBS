@@ -11,6 +11,11 @@ const projectsDirectory = path.join(__dirname, "projects");
 const openAiApiHost = "api.openai.com";
 const openAiResponsesPath = "/v1/responses";
 const openAiImagesPath = "/v1/images/generations";
+const evolinkApiHost = "api.evolink.ai";
+const evolinkVideoGenerationPath = "/v1/videos/generations";
+const evolinkTaskPathPrefix = "/v1/tasks/";
+const evolinkFilesApiHost = "files-api.evolink.ai";
+const evolinkBase64UploadPath = "/api/v1/files/upload/base64";
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -19,12 +24,18 @@ const contentTypes = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
 };
 const supportedDurations = [3, 4, 5];
 const projectAssetFolderNames = ["scripts", "images", "videos", "voices"];
 const imageOutputFormat = "png";
+const evolinkVideoModel = "kling-o3-image-to-video";
+const evolinkVideoPollingIntervalMs = 3000;
+const evolinkVideoPollingTimeoutMs = 120000;
 let scriptRequestSequence = 0;
 let imageRequestSequence = 0;
+let videoRequestSequence = 0;
 
 /**
  * 서버 터미널 확인용 로그를 공통 형식으로 출력한다.
@@ -180,6 +191,51 @@ function validateImageRequestPayload(requestBody) {
 }
 
 /**
+ * 영상 생성 요청값이 현재 허용 범위와 맞는지 확인한다.
+ */
+function validateVideoRequestPayload(requestBody) {
+  const topic = typeof requestBody.topic === "string" ? requestBody.topic.trim() : "";
+  const videoPrompt = typeof requestBody.videoPrompt === "string" ? requestBody.videoPrompt.trim() : "";
+  const klingApiKey = typeof requestBody.klingApiKey === "string" ? requestBody.klingApiKey.trim() : "";
+  const projectFolderName = typeof requestBody.projectFolderName === "string" ? requestBody.projectFolderName.trim() : "";
+  const sourceImagePath = typeof requestBody.sourceImagePath === "string" ? requestBody.sourceImagePath.trim() : "";
+  const sceneIndex = Number.parseInt(String(requestBody.sceneIndex), 10);
+
+  if (!topic) {
+    throw new Error("프로젝트 주제를 확인할 수 없습니다.");
+  }
+
+  if (!videoPrompt) {
+    throw new Error("영상 생성용 프롬프트가 필요합니다.");
+  }
+
+  if (!klingApiKey) {
+    throw new Error("EvoLink.AI API 키가 필요합니다.");
+  }
+
+  if (!projectFolderName) {
+    throw new Error("프로젝트 폴더 정보를 확인할 수 없습니다.");
+  }
+
+  if (!sourceImagePath) {
+    throw new Error("영상 생성에 사용할 이미지 경로가 필요합니다.");
+  }
+
+  if (Number.isNaN(sceneIndex) || sceneIndex < 0) {
+    throw new Error("생성할 장면 번호가 올바르지 않습니다.");
+  }
+
+  return {
+    topic,
+    videoPrompt,
+    klingApiKey,
+    projectFolderName,
+    sourceImagePath,
+    sceneIndex,
+  };
+}
+
+/**
  * 프로젝트 폴더 이름으로 사용할 수 있도록 주제를 정리한다.
  */
 function sanitizeProjectFolderName(topic) {
@@ -204,12 +260,14 @@ function createProjectStoragePaths(topic, projectFolderNameOverride) {
   const projectDirectory = path.join(projectsDirectory, projectFolderName);
   const scriptsDirectory = path.join(projectDirectory, "scripts");
   const imagesDirectory = path.join(projectDirectory, "images");
+  const videosDirectory = path.join(projectDirectory, "videos");
 
   return {
     projectFolderName,
     projectDirectory,
     scriptsDirectory,
     imagesDirectory,
+    videosDirectory,
     projectFilePath: path.join(projectDirectory, "project.json"),
     scriptFilePath: path.join(scriptsDirectory, "scene-script.json"),
   };
@@ -249,7 +307,7 @@ function normalizeScriptSceneItem(sceneItem) {
 /**
  * 프로젝트 대표 상태 JSON 본문을 만든다.
  */
-function createProjectStatePayload(projectMeta, imageItems) {
+function createProjectStatePayload(projectMeta, imageItems, videoItems) {
   return {
     projectTopic: projectMeta.topic,
     projectFolderName: projectMeta.projectFolderName,
@@ -262,14 +320,18 @@ function createProjectStatePayload(projectMeta, imageItems) {
       sceneIndex: imageItem.sceneIndex,
       filePath: imageItem.filePath,
     })),
+    videos: videoItems.map((videoItem) => ({
+      sceneIndex: videoItem.sceneIndex,
+      filePath: videoItem.filePath,
+    })),
   };
 }
 
 /**
  * 프로젝트 대표 상태 JSON을 저장한다.
  */
-async function saveProjectStateToProject(projectMeta, imageItems) {
-  const projectFilePayload = createProjectStatePayload(projectMeta, imageItems);
+async function saveProjectStateToProject(projectMeta, imageItems, videoItems) {
+  const projectFilePayload = createProjectStatePayload(projectMeta, imageItems, videoItems);
 
   await fs.promises.writeFile(
     projectMeta.projectFilePath,
@@ -308,6 +370,7 @@ async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
       projectFilePath: storagePaths.projectFilePath,
       sceneCount: sceneItems.length,
     },
+    [],
     []
   );
 
@@ -337,6 +400,53 @@ async function saveSceneImageToProject(imageRequest, imageBase64, outputFormat) 
 }
 
 /**
+ * 원격 영상 URL을 프로젝트 폴더 안의 파일로 내려받아 저장한다.
+ */
+function downloadVideoFile(videoUrl) {
+  return new Promise((resolve, reject) => {
+    https.get(videoUrl, (downloadResponse) => {
+      const responseChunks = [];
+
+      if (downloadResponse.statusCode && downloadResponse.statusCode >= 400) {
+        reject(new Error("생성된 영상을 내려받지 못했습니다."));
+        return;
+      }
+
+      downloadResponse.on("data", (chunk) => {
+        responseChunks.push(chunk);
+      });
+
+      downloadResponse.on("end", () => {
+        resolve(Buffer.concat(responseChunks));
+      });
+    }).on("error", (error) => {
+      reject(new Error(error instanceof Error ? error.message : "영상 파일 다운로드 중 오류가 발생했습니다."));
+    });
+  });
+}
+
+/**
+ * 생성된 장면 영상을 프로젝트 폴더 안의 파일로 저장한다.
+ */
+async function saveSceneVideoToProject(videoRequest, videoUrl) {
+  const storagePaths = await ensureProjectDirectories(videoRequest.topic, videoRequest.projectFolderName);
+  const sceneNumber = String(videoRequest.sceneIndex + 1).padStart(2, "0");
+  const videoFileName = `scene-${sceneNumber}.mp4`;
+  const videoFilePath = path.join(storagePaths.videosDirectory, videoFileName);
+  const videoWebPath = `/projects/${encodeURIComponent(storagePaths.projectFolderName)}/videos/${encodeURIComponent(videoFileName)}`;
+  const videoBytes = await downloadVideoFile(videoUrl);
+
+  await fs.promises.writeFile(videoFilePath, videoBytes);
+
+  return {
+    ...storagePaths,
+    videoFileName,
+    videoFilePath,
+    videoWebPath,
+  };
+}
+
+/**
  * 프로젝트 대표 JSON에 생성된 이미지 상태를 반영한다.
  */
 async function updateProjectSceneImageState(imageRequest, savedImageResult) {
@@ -359,6 +469,7 @@ async function updateProjectSceneImageState(imageRequest, savedImageResult) {
         projectFilePath: storagePaths.projectFilePath,
         sceneCount: Array.isArray(scriptPayload.scenes) ? scriptPayload.scenes.length : 0,
       },
+      [],
       []
     );
   }
@@ -385,6 +496,319 @@ async function updateProjectSceneImageState(imageRequest, savedImageResult) {
     JSON.stringify(nextProjectPayload, null, 2),
     "utf8"
   );
+}
+
+/**
+ * 프로젝트 대표 JSON에 생성된 영상 상태를 반영한다.
+ */
+async function updateProjectSceneVideoState(videoRequest, savedVideoResult) {
+  const storagePaths = createProjectStoragePaths(videoRequest.topic, videoRequest.projectFolderName);
+  let projectPayload = null;
+
+  try {
+    const rawProjectText = await fs.promises.readFile(storagePaths.projectFilePath, "utf8");
+    projectPayload = JSON.parse(rawProjectText);
+  } catch (error) {
+    const rawScriptText = await fs.promises.readFile(storagePaths.scriptFilePath, "utf8");
+    const scriptPayload = JSON.parse(rawScriptText);
+
+    projectPayload = createProjectStatePayload(
+      {
+        topic: typeof scriptPayload.projectTopic === "string" ? scriptPayload.projectTopic : videoRequest.topic,
+        projectFolderName: storagePaths.projectFolderName,
+        tone: typeof scriptPayload.tone === "string" ? scriptPayload.tone : "",
+        style: typeof scriptPayload.style === "string" ? scriptPayload.style : "",
+        projectFilePath: storagePaths.projectFilePath,
+        sceneCount: Array.isArray(scriptPayload.scenes) ? scriptPayload.scenes.length : 0,
+      },
+      [],
+      []
+    );
+  }
+
+  const videoItems = Array.isArray(projectPayload.videos) ? projectPayload.videos : [];
+  const filteredVideoItems = videoItems.filter((videoItem) => videoItem?.sceneIndex !== videoRequest.sceneIndex);
+  filteredVideoItems.push({
+    sceneIndex: videoRequest.sceneIndex,
+    filePath: `videos/${savedVideoResult.videoFileName}`,
+  });
+  filteredVideoItems.sort((leftItem, rightItem) => leftItem.sceneIndex - rightItem.sceneIndex);
+
+  const nextProjectPayload = {
+    ...projectPayload,
+    projectTopic: typeof projectPayload.projectTopic === "string" ? projectPayload.projectTopic : videoRequest.topic,
+    projectFolderName: storagePaths.projectFolderName,
+    scriptFilePath: "scripts/scene-script.json",
+    savedAt: new Date().toISOString(),
+    videos: filteredVideoItems,
+  };
+
+  await fs.promises.writeFile(
+    storagePaths.projectFilePath,
+    JSON.stringify(nextProjectPayload, null, 2),
+    "utf8"
+  );
+}
+
+/**
+ * 파일 경로 확장자를 기준으로 MIME 타입을 계산한다.
+ */
+function getMimeTypeFromFilePath(filePath) {
+  return contentTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+}
+
+/**
+ * 프로젝트 안의 상대 이미지 경로를 실제 파일 경로로 변환한다.
+ */
+function resolveProjectImageFilePath(videoRequest) {
+  const storagePaths = createProjectStoragePaths(videoRequest.topic, videoRequest.projectFolderName);
+  const candidatePath = path.isAbsolute(videoRequest.sourceImagePath)
+    ? videoRequest.sourceImagePath
+    : path.join(storagePaths.projectDirectory, videoRequest.sourceImagePath.replaceAll("/", path.sep));
+  const normalizedPath = path.normalize(candidatePath);
+
+  if (!normalizedPath.startsWith(storagePaths.projectDirectory)) {
+    throw new Error("프로젝트 이미지 경로가 올바르지 않습니다.");
+  }
+
+  return normalizedPath;
+}
+
+/**
+ * 로컬 이미지 파일을 EvoLink 파일 업로드 API에 올리고 공개 URL을 돌려받는다.
+ */
+function uploadImageFileToEvoLink(videoRequest, requestId) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const imageFilePath = resolveProjectImageFilePath(videoRequest);
+      const imageBytes = await fs.promises.readFile(imageFilePath);
+      const requestPayload = JSON.stringify({
+        base64_data: `data:${getMimeTypeFromFilePath(imageFilePath)};base64,${imageBytes.toString("base64")}`,
+        upload_path: `projects/${videoRequest.projectFolderName}/videos/source-images`,
+        file_name: path.basename(imageFilePath),
+      });
+
+      logServerEvent(`[영상 생성 ${requestId}] EvoLink 파일 업로드 시작`, {
+        sceneIndex: videoRequest.sceneIndex,
+        imageFilePath,
+      });
+
+      const apiRequest = https.request(
+        {
+          hostname: evolinkFilesApiHost,
+          path: evolinkBase64UploadPath,
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${videoRequest.klingApiKey}`,
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(requestPayload),
+          },
+        },
+        (apiResponse) => {
+          const responseChunks = [];
+
+          apiResponse.on("data", (chunk) => {
+            responseChunks.push(chunk);
+          });
+
+          apiResponse.on("end", () => {
+            try {
+              const rawResponse = Buffer.concat(responseChunks).toString("utf8");
+              const parsedResponse = JSON.parse(rawResponse);
+
+              if (apiResponse.statusCode && apiResponse.statusCode >= 400) {
+                reject(new Error(parsedResponse.msg || parsedResponse.error?.message || "EvoLink 파일 업로드에 실패했습니다."));
+                return;
+              }
+
+              const uploadedFileUrl = typeof parsedResponse.data?.file_url === "string" ? parsedResponse.data.file_url : "";
+
+              if (!uploadedFileUrl) {
+                throw new Error("업로드된 이미지 URL을 읽지 못했습니다.");
+              }
+
+              logServerEvent(`[영상 생성 ${requestId}] EvoLink 파일 업로드 완료`, {
+                uploadedFileUrl,
+              });
+              resolve(uploadedFileUrl);
+            } catch (error) {
+              reject(new Error(error instanceof Error ? error.message : "EvoLink 업로드 응답을 해석하지 못했습니다."));
+            }
+          });
+        }
+      );
+
+      apiRequest.on("error", (error) => {
+        reject(new Error(error instanceof Error ? error.message : "EvoLink 업로드 통신 중 오류가 발생했습니다."));
+      });
+
+      apiRequest.write(requestPayload);
+      apiRequest.end();
+    } catch (error) {
+      reject(new Error(error instanceof Error ? error.message : "영상 생성용 이미지를 준비하지 못했습니다."));
+    }
+  });
+}
+
+/**
+ * EvoLink 영상 생성 작업을 시작한다.
+ */
+function requestEvoLinkVideoTask(videoRequest, sourceImageUrl, requestId) {
+  return new Promise((resolve, reject) => {
+    const requestPayload = JSON.stringify({
+      model: evolinkVideoModel,
+      prompt: videoRequest.videoPrompt,
+      image_urls: [sourceImageUrl],
+    });
+
+    logServerEvent(`[영상 생성 ${requestId}] EvoLink 영상 생성 요청 시작`, {
+      model: evolinkVideoModel,
+      sceneIndex: videoRequest.sceneIndex,
+    });
+
+    const apiRequest = https.request(
+      {
+        hostname: evolinkApiHost,
+        path: evolinkVideoGenerationPath,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${videoRequest.klingApiKey}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(requestPayload),
+        },
+      },
+      (apiResponse) => {
+        const responseChunks = [];
+
+        apiResponse.on("data", (chunk) => {
+          responseChunks.push(chunk);
+        });
+
+        apiResponse.on("end", () => {
+          try {
+            const rawResponse = Buffer.concat(responseChunks).toString("utf8");
+            const parsedResponse = JSON.parse(rawResponse);
+
+            if (apiResponse.statusCode && apiResponse.statusCode >= 400) {
+              reject(new Error(parsedResponse.error?.message || parsedResponse.msg || "EvoLink 영상 생성 요청에 실패했습니다."));
+              return;
+            }
+
+            if (typeof parsedResponse.id !== "string" || !parsedResponse.id.trim()) {
+              throw new Error("EvoLink 작업 ID를 받지 못했습니다.");
+            }
+
+            resolve(parsedResponse);
+          } catch (error) {
+            reject(new Error(error instanceof Error ? error.message : "EvoLink 영상 생성 응답을 해석하지 못했습니다."));
+          }
+        });
+      }
+    );
+
+    apiRequest.on("error", (error) => {
+      reject(new Error(error instanceof Error ? error.message : "EvoLink 영상 생성 통신 중 오류가 발생했습니다."));
+    });
+
+    apiRequest.write(requestPayload);
+    apiRequest.end();
+  });
+}
+
+/**
+ * EvoLink 비동기 작업 상태를 조회한다.
+ */
+function requestEvoLinkTaskStatus(taskId, apiKey) {
+  return new Promise((resolve, reject) => {
+    const apiRequest = https.request(
+      {
+        hostname: evolinkApiHost,
+        path: `${evolinkTaskPathPrefix}${encodeURIComponent(taskId)}`,
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      },
+      (apiResponse) => {
+        const responseChunks = [];
+
+        apiResponse.on("data", (chunk) => {
+          responseChunks.push(chunk);
+        });
+
+        apiResponse.on("end", () => {
+          try {
+            const rawResponse = Buffer.concat(responseChunks).toString("utf8");
+            const parsedResponse = JSON.parse(rawResponse);
+
+            if (apiResponse.statusCode && apiResponse.statusCode >= 400) {
+              reject(new Error(parsedResponse.error?.message || parsedResponse.msg || "EvoLink 작업 상태 조회에 실패했습니다."));
+              return;
+            }
+
+            resolve(parsedResponse);
+          } catch (error) {
+            reject(new Error(error instanceof Error ? error.message : "EvoLink 작업 상태 응답을 해석하지 못했습니다."));
+          }
+        });
+      }
+    );
+
+    apiRequest.on("error", (error) => {
+      reject(new Error(error instanceof Error ? error.message : "EvoLink 작업 상태 통신 중 오류가 발생했습니다."));
+    });
+
+    apiRequest.end();
+  });
+}
+
+/**
+ * 지정한 시간만큼 기다린다.
+ */
+function delay(waitMilliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, waitMilliseconds);
+  });
+}
+
+/**
+ * EvoLink 영상 작업이 끝날 때까지 polling 하고 결과 URL을 돌려준다.
+ */
+async function waitForEvoLinkVideoResult(taskId, apiKey, requestId) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt <= evolinkVideoPollingTimeoutMs) {
+    const taskStatus = await requestEvoLinkTaskStatus(taskId, apiKey);
+    const normalizedStatus = typeof taskStatus.status === "string" ? taskStatus.status : "";
+
+    logServerEvent(`[영상 생성 ${requestId}] EvoLink 작업 상태 조회`, {
+      taskId,
+      status: normalizedStatus,
+      progress: typeof taskStatus.progress === "number" ? taskStatus.progress : 0,
+    });
+
+    if (normalizedStatus === "completed") {
+      const videoResults = Array.isArray(taskStatus.results) ? taskStatus.results : [];
+      const videoUrl = typeof videoResults[0] === "string" ? videoResults[0] : "";
+
+      if (!videoUrl) {
+        throw new Error("생성된 영상 URL을 읽지 못했습니다.");
+      }
+
+      return {
+        taskId,
+        videoUrl,
+      };
+    }
+
+    if (normalizedStatus === "failed") {
+      throw new Error(taskStatus.error?.message || "EvoLink 영상 생성 작업이 실패했습니다.");
+    }
+
+    await delay(evolinkVideoPollingIntervalMs);
+  }
+
+  throw new Error("영상 생성 시간이 길어져 응답 대기 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.");
 }
 
 /**
@@ -772,6 +1196,50 @@ async function handleGenerateImageRequest(request, response) {
 }
 
 /**
+ * 장면 영상 생성 API 요청을 처리한다.
+ */
+async function handleGenerateVideoRequest(request, response) {
+  const requestId = String(++videoRequestSequence).padStart(3, "0");
+
+  try {
+    logServerEvent(`[영상 생성 ${requestId}] 요청 수신`);
+    const requestBody = await readJsonBody(request);
+    const validatedPayload = validateVideoRequestPayload(requestBody);
+    logServerEvent(`[영상 생성 ${requestId}] 요청 검증 완료`, {
+      topic: validatedPayload.topic,
+      sceneIndex: validatedPayload.sceneIndex,
+      hasKlingApiKey: Boolean(validatedPayload.klingApiKey),
+    });
+
+    const uploadedImageUrl = await uploadImageFileToEvoLink(validatedPayload, requestId);
+    const createdTask = await requestEvoLinkVideoTask(validatedPayload, uploadedImageUrl, requestId);
+    const completedTask = await waitForEvoLinkVideoResult(createdTask.id, validatedPayload.klingApiKey, requestId);
+    const savedVideoResult = await saveSceneVideoToProject(validatedPayload, completedTask.videoUrl);
+    await updateProjectSceneVideoState(validatedPayload, savedVideoResult);
+
+    logServerEvent(`[영상 생성 ${requestId}] 응답 반환 완료`, {
+      sceneIndex: validatedPayload.sceneIndex,
+      taskId: completedTask.taskId,
+    });
+    sendJson(response, 200, {
+      video: {
+        taskId: completedTask.taskId,
+        filePath: savedVideoResult.videoFilePath,
+        webPath: savedVideoResult.videoWebPath,
+        sourceImageUrl: uploadedImageUrl,
+      },
+    });
+  } catch (error) {
+    logServerEvent(`[영상 생성 ${requestId}] 요청 처리 실패`, {
+      message: error instanceof Error ? error.message : "영상 생성 요청에 실패했습니다.",
+    });
+    sendJson(response, 400, {
+      error: error instanceof Error ? error.message : "영상 생성 요청에 실패했습니다.",
+    });
+  }
+}
+
+/**
  * 요청 경로에 따라 기본 응답을 분기한다.
  */
 function handleRequest(request, response) {
@@ -784,6 +1252,11 @@ function handleRequest(request, response) {
 
   if (request.method === "POST" && requestPath === "/api/image/generate") {
     handleGenerateImageRequest(request, response);
+    return;
+  }
+
+  if (request.method === "POST" && requestPath === "/api/video/generate") {
+    handleGenerateVideoRequest(request, response);
     return;
   }
 

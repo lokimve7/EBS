@@ -4,12 +4,22 @@
   "tone": "신나는",
   "style": "브이로그",
   "sceneCount": 3,
-  "savedAt": "2026-07-06T06:31:57.429Z",
+  "savedAt": "2026-07-06T07:55:31.082Z",
   "scriptFilePath": "scripts/scene-script.json",
   "images": [
     {
+      "sceneIndex": 1,
+      "filePath": "images/scene-02.png"
+    },
+    {
       "sceneIndex": 2,
       "filePath": "images/scene-03.png"
+    }
+  ],
+  "videos": [
+    {
+      "sceneIndex": 1,
+      "filePath": "videos/scene-02.mp4"
     }
   ]
 }

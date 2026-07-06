@@ -24,3 +24,21 @@
 - 2026-06-30: `01-5` 후보가 `01-4` 다음 단계로 적합한지 검토했고, 공통 API 키 설정 창 task 초안을 작업리스트에 추가했다.
 - 2026-06-30: `01-5`를 `진행중`으로 전환하고 공통 API 키 설정 창의 적용 파일, 저장 방식, 구조 의심 지점을 검토했다.
 - 2026-06-30: `public/index.html`, `public/styles/main.css`, `public/scripts/main.js`에 공통 API 키 설정 모달, 로컬 저장소 저장, 보기 전환, 취소/닫기 동작을 구현했다.
+- 2026-07-06: `01-12`를 `진행중`으로 전환하고 `server.js`, `public/scripts/main.js`에 프로젝트 대표 JSON 기반 이미지 상태 저장/복원과 `projects/` 이미지 정적 제공 경로를 구현했다.
+- 2026-07-06: `Tasks/01-12.md`, `docs/ARCHITECTURE.md`를 실제 구현 기준으로 갱신했고 `node --check server.js`, `node --check public/scripts/main.js` 정적 점검을 완료했다.
+- 2026-07-06: `01-11`을 `진행중`으로 전환하고 OpenAI 공식 이미지 생성 문서를 기준으로 `/api/image/generate` 서버 API, 프로젝트 `images/` 저장, 이미지 탭 카드별 로딩/완료 상태 렌더링을 구현했다.
+- 2026-07-06: `Tasks/01-11.md`, `docs/ARCHITECTURE.md`를 실제 구현 기준으로 갱신했고 `node --check server.js`, `node --check public/scripts/main.js` 정적 점검을 완료했다.
+- 2026-07-06: 사용자가 `01-10` 수동 결과 확인을 완료했고, 이미지 탭 카드 연동과 카드 폭 고정 조정을 포함해 `01-10` 상태를 `완료`로 갱신했다.
+- 2026-07-06: `public/styles/main.css`에서 이미지 카드 열 너비를 고정해 장면 수가 4개 이상이어도 카드 폭이 줄어들지 않고 가로 스크롤로 이어지게 조정했다.
+- 2026-07-06: `01-10`을 `진행중`으로 전환하고 `public/index.html`, `public/scripts/main.js`에 이미지 탭 씬 카드 동적 렌더링을 연결해 스크립트 생성 결과와 프로젝트 불러오기 결과가 이미지 탭에도 반영되게 했다.
+- 2026-07-06: `Tasks/01-10.md`, `docs/ARCHITECTURE.md`를 실제 구현 기준으로 갱신했고 `node --check public/scripts/main.js` 정적 점검을 완료했다.
+- 2026-07-06: `01-8` 승인 후 `server.js`에 프로젝트 폴더 이름 정리, `projects/` 루트 생성, `scripts/images/videos/voices` 하위 폴더 보장, `scripts/scene-script.json` 자동 저장 로직을 추가했다.
+- 2026-07-06: `Tasks/01-8.md`, `docs/ARCHITECTURE.md`, `docs/PENDING_ISSUES.md`를 실제 구현 기준으로 갱신했고 `node --check server.js` 정적 점검을 완료했다.
+- 2026-07-04: `01-7`을 `진행중`으로 전환하고 `이미지` 탭 패널의 현재 비어 있는 구조와 기존 탭 레이아웃 파일 책임을 점검했다.
+- 2026-07-04: `public/index.html`, `public/styles/main.css`에 `Layout/02_layout_image.png` 기준의 이미지 씬 카드 레이아웃과 가로 스크롤 카드 영역을 구현하고 `node --check public/scripts/main.js` 정적 점검을 완료했다.
+- 2026-07-04: `Tasks/01-7.md`, `docs/ARCHITECTURE.md`를 실제 구현 기준으로 갱신했다.
+- 2026-06-30: `01-6`를 `진행중`으로 전환하고 OpenAI API 요청 경로, 화면 상태 갱신 지점, 구조 의심 파일을 검토했다.
+- 2026-06-30: `server.js`, `public/index.html`, `public/scripts/main.js`에 OpenAI Responses API 기반 장면 스크립트 생성 요청, 응답 스키마 처리, 동적 씬 카드 렌더링을 구현했다.
+- 2026-06-30: `node --check server.js`, `node --check public/scripts/main.js` 정적 문법 점검을 완료했고, `public/styles/main.css`에 생성 상태 배너 색상 분기를 추가했다.
+- 2026-06-30: `Tasks/01-6.md`, `docs/ARCHITECTURE.md`, `docs/PENDING_ISSUES.md`를 실제 구현 기준으로 갱신했고, 오래된 최근 작업 로그를 `docs/LOGS.md`로 이동했다.
+- 2026-06-30: 서버 터미널에서 스크립트 생성 요청 흐름을 확인할 수 있도록 `server.js`에 요청 수신, OpenAI 호출, 응답 성공/실패 로그를 추가했다.
