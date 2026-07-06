@@ -7,6 +7,7 @@ const PORT = 3001;
 const HOST = "localhost";
 const publicDirectory = path.join(__dirname, "public");
 const indexFilePath = path.join(publicDirectory, "index.html");
+const projectsDirectory = path.join(__dirname, "projects");
 const openAiApiHost = "api.openai.com";
 const openAiResponsesPath = "/v1/responses";
 const contentTypes = {
@@ -15,6 +16,7 @@ const contentTypes = {
   ".js": "application/javascript; charset=utf-8",
 };
 const supportedDurations = [3, 4, 5];
+const projectAssetFolderNames = ["scripts", "images", "videos", "voices"];
 let scriptRequestSequence = 0;
 
 /**
@@ -133,6 +135,78 @@ function validateScriptRequestPayload(requestBody) {
     sceneCount,
     openaiApiKey,
   };
+}
+
+/**
+ * 프로젝트 폴더 이름으로 사용할 수 있도록 주제를 정리한다.
+ */
+function sanitizeProjectFolderName(topic) {
+  const normalizedTopic = String(topic).normalize("NFC").trim();
+  const sanitizedTopic = normalizedTopic
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[. ]+$/g, "")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+
+  return sanitizedTopic || "project";
+}
+
+/**
+ * 프로젝트 저장에 필요한 기본 폴더 구조 경로를 계산한다.
+ */
+function createProjectStoragePaths(topic) {
+  const projectFolderName = sanitizeProjectFolderName(topic);
+  const projectDirectory = path.join(projectsDirectory, projectFolderName);
+  const scriptsDirectory = path.join(projectDirectory, "scripts");
+
+  return {
+    projectFolderName,
+    projectDirectory,
+    scriptsDirectory,
+    scriptFilePath: path.join(scriptsDirectory, "scene-script.json"),
+  };
+}
+
+/**
+ * 프로젝트별 결과 저장 폴더와 하위 자산 폴더를 보장한다.
+ */
+async function ensureProjectDirectories(topic) {
+  const storagePaths = createProjectStoragePaths(topic);
+  const directoriesToCreate = [
+    projectsDirectory,
+    storagePaths.projectDirectory,
+    ...projectAssetFolderNames.map((folderName) => path.join(storagePaths.projectDirectory, folderName)),
+  ];
+
+  for (const directoryPath of directoriesToCreate) {
+    await fs.promises.mkdir(directoryPath, { recursive: true });
+  }
+
+  return storagePaths;
+}
+
+/**
+ * 생성된 장면 스크립트를 프로젝트 폴더 안의 JSON 파일로 저장한다.
+ */
+async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
+  const storagePaths = await ensureProjectDirectories(scriptRequest.topic);
+  const scriptFilePayload = {
+    projectTopic: scriptRequest.topic,
+    tone: scriptRequest.tone,
+    style: scriptRequest.style,
+    sceneCount: sceneItems.length,
+    savedAt: new Date().toISOString(),
+    scenes: sceneItems,
+  };
+
+  await fs.promises.writeFile(
+    storagePaths.scriptFilePath,
+    JSON.stringify(scriptFilePayload, null, 2),
+    "utf8"
+  );
+
+  return storagePaths;
 }
 
 /**
@@ -345,11 +419,23 @@ async function handleGenerateScriptRequest(request, response) {
 
     const sceneResponse = await requestOpenAiSceneScripts(validatedPayload, requestId);
     const sceneItems = Array.isArray(sceneResponse.scenes) ? sceneResponse.scenes : [];
+    const projectStorage = await saveSceneScriptsToProject(validatedPayload, sceneItems);
+
+    logServerEvent(`[스크립트 생성 ${requestId}] 프로젝트 저장 완료`, {
+      projectFolderName: projectStorage.projectFolderName,
+      scriptFilePath: projectStorage.scriptFilePath,
+    });
     logServerEvent(`[스크립트 생성 ${requestId}] 응답 반환 완료`, {
       sceneCount: sceneItems.length,
     });
 
-    sendJson(response, 200, { scenes: sceneItems });
+    sendJson(response, 200, {
+      scenes: sceneItems,
+      project: {
+        folderName: projectStorage.projectFolderName,
+        scriptFilePath: projectStorage.scriptFilePath,
+      },
+    });
   } catch (error) {
     logServerEvent(`[스크립트 생성 ${requestId}] 요청 처리 실패`, {
       message: error instanceof Error ? error.message : "스크립트 생성 요청에 실패했습니다.",

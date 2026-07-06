@@ -1,0 +1,30 @@
+{
+  "projectTopic": "2026년 서울 여행",
+  "tone": "신나는",
+  "style": "브이로그",
+  "sceneCount": 3,
+  "savedAt": "2026-07-06T01:44:33.266Z",
+  "scenes": [
+    {
+      "summary": "인천공항에 도착해 서울 여행을 시작하는 신나는 오프닝",
+      "narration": "2026년 서울 여행, 지금 바로 시작합니다!",
+      "durationSeconds": 4,
+      "imagePrompt": "Exciting travel vlog opening at Incheon International Airport in 2026, young traveler with suitcase, bright modern terminal, Korean signs, energetic atmosphere, handheld vlog style, vibrant colors",
+      "videoPrompt": "Handheld vlog shot following a traveler walking through Incheon International Airport, quick cheerful camera movement, suitcase rolling, bright terminal lights, energetic travel mood, 2026 Seoul trip opening"
+    },
+    {
+      "summary": "홍대 거리에서 맛집과 버스킹을 즐기는 활기찬 순간",
+      "narration": "홍대에 오자마자 맛집, 음악, 사람들까지 완전 에너지 폭발!",
+      "durationSeconds": 5,
+      "imagePrompt": "Hongdae street in Seoul, lively 2026 travel vlog scene, street food stalls, buskers performing, young crowds, neon signs, trendy cafes, colorful and energetic atmosphere",
+      "videoPrompt": "Dynamic handheld vlog footage moving through Hongdae street, close-ups of street food, busker performance, laughing friends, neon lights, fast upbeat pacing, exciting Seoul nightlife vibe"
+    },
+    {
+      "summary": "한강공원에서 야경과 함께 여행을 마무리하는 장면",
+      "narration": "마지막은 한강 야경! 서울은 밤까지 완벽해요.",
+      "durationSeconds": 4,
+      "imagePrompt": "Han River Park at night in Seoul, 2026 vlog style, sparkling city skyline, illuminated bridges, friends sitting with snacks, relaxed but exciting travel finale, cinematic vibrant night colors",
+      "videoPrompt": "Smooth vlog-style pan across Han River night view, glowing bridge lights, city skyline reflections on water, traveler smiling to camera with snacks, joyful closing moment of Seoul trip"
+    }
+  ]
+}
