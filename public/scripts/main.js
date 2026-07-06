@@ -8,6 +8,8 @@ const generateScriptButton = document.querySelector("#generate-script-button");
 const generateButtonLabel = document.querySelector(".generate-button__label");
 const sceneCardList = document.querySelector("#scene-card-list");
 const sceneStatusBanner = document.querySelector("#scene-status-banner");
+const openProjectFileButton = document.querySelector("#open-project-file-button");
+const projectFileInput = document.querySelector("#project-file-input");
 const openApiKeyModalButton = document.querySelector("#open-api-key-modal-button");
 const apiKeyModal = document.querySelector("#api-key-modal");
 const apiKeyForm = document.querySelector("#api-key-form");
@@ -224,6 +226,111 @@ function setSceneStatus(message, statusType) {
 }
 
 /**
+ * 저장된 프로젝트의 스크립트 설정값을 현재 입력칸에 반영한다.
+ */
+function syncScriptSettingsFromProject(projectPayload) {
+  const selectedTone = document.querySelector("#tone-select");
+  const selectedStyle = document.querySelector("#style-select");
+
+  if (topicInput && typeof projectPayload.projectTopic === "string") {
+    topicInput.value = projectPayload.projectTopic;
+    syncTopicCount();
+  }
+
+  if (selectedTone && typeof projectPayload.tone === "string") {
+    selectedTone.value = projectPayload.tone;
+  }
+
+  if (selectedStyle && typeof projectPayload.style === "string") {
+    selectedStyle.value = projectPayload.style;
+  }
+
+  if (sceneCountInput) {
+    const nextSceneCount = Number.isInteger(projectPayload.sceneCount)
+      ? projectPayload.sceneCount
+      : Array.isArray(projectPayload.scenes)
+        ? projectPayload.scenes.length
+        : sceneCountInput.value;
+
+    syncSceneCount(nextSceneCount);
+  }
+}
+
+/**
+ * 저장된 프로젝트 파일의 장면 데이터 형식이 현재 화면과 맞는지 확인한다.
+ */
+function validateProjectFilePayload(projectPayload) {
+  if (!projectPayload || typeof projectPayload !== "object") {
+    throw new Error("프로젝트 파일 내용을 읽지 못했습니다.");
+  }
+
+  const sceneItems = Array.isArray(projectPayload.scenes) ? projectPayload.scenes : null;
+
+  if (!sceneItems || sceneItems.length === 0) {
+    throw new Error("장면 데이터가 없는 프로젝트 파일입니다.");
+  }
+
+  sceneItems.forEach((sceneItem, index) => {
+    const hasRequiredText =
+      sceneItem &&
+      typeof sceneItem.summary === "string" &&
+      typeof sceneItem.narration === "string" &&
+      typeof sceneItem.imagePrompt === "string" &&
+      typeof sceneItem.videoPrompt === "string";
+    const hasValidDuration = Number.isInteger(sceneItem?.durationSeconds);
+
+    if (!hasRequiredText || !hasValidDuration) {
+      throw new Error(`장면 ${index + 1} 데이터 형식이 올바르지 않습니다.`);
+    }
+  });
+
+  return sceneItems;
+}
+
+/**
+ * 사용자가 선택한 프로젝트 파일을 읽어 장면 카드와 입력값을 복원한다.
+ */
+async function importProjectFile(fileObject) {
+  if (!(fileObject instanceof File)) {
+    return;
+  }
+
+  setSceneStatus("저장된 프로젝트 파일을 불러오는 중입니다...", "loading");
+
+  try {
+    const rawFileText = await fileObject.text();
+    let projectPayload = null;
+
+    try {
+      projectPayload = rawFileText ? JSON.parse(rawFileText) : null;
+    } catch (error) {
+      throw new Error("JSON 형식의 프로젝트 파일만 불러올 수 있습니다.");
+    }
+
+    const sceneItems = validateProjectFilePayload(projectPayload);
+
+    syncScriptSettingsFromProject(projectPayload);
+    renderSceneCards(sceneItems);
+    activateTab("script");
+
+    const projectName = typeof projectPayload.projectTopic === "string" && projectPayload.projectTopic.trim()
+      ? projectPayload.projectTopic.trim()
+      : fileObject.name;
+
+    setSceneStatus(`${projectName} 프로젝트의 장면 ${sceneItems.length}개를 불러왔습니다.`, "success");
+  } catch (error) {
+    setSceneStatus(
+      error instanceof Error ? error.message : "프로젝트 파일을 불러오지 못했습니다.",
+      "error"
+    );
+  } finally {
+    if (projectFileInput) {
+      projectFileInput.value = "";
+    }
+  }
+}
+
+/**
  * 장면 데이터를 현재 화면 카드 마크업으로 다시 그린다.
  */
 function renderSceneCards(sceneItems) {
@@ -379,6 +486,24 @@ if (sceneCountInput) {
 if (generateScriptButton) {
   generateScriptButton.addEventListener("click", () => {
     generateScenesFromApi();
+  });
+}
+
+if (openProjectFileButton && projectFileInput) {
+  openProjectFileButton.addEventListener("click", () => {
+    projectFileInput.click();
+  });
+}
+
+if (projectFileInput) {
+  projectFileInput.addEventListener("change", () => {
+    const selectedFile = projectFileInput.files?.[0];
+
+    if (!selectedFile) {
+      return;
+    }
+
+    importProjectFile(selectedFile);
   });
 }
 

@@ -16,7 +16,7 @@
           <strong class="brand-title">AI 콘텐츠 스튜디오</strong>
         </div>
         <div class="top-actions" aria-label="상단 버튼">
-          <button type="button" class="utility-button">
+          <button type="button" class="utility-button" id="open-project-file-button">
             <span class="utility-button__icon" aria-hidden="true">↓</span>
             <span>프로젝트 불러오기</span>
           </button>
@@ -287,6 +287,8 @@
         <section class="content-panel" id="panel-mix" role="tabpanel" aria-labelledby="tab-mix" data-tab-panel="mix" hidden></section>
       </section>
     </main>
+
+    <input type="file" id="project-file-input" accept=".json,application/json" hidden />
 
     <div class="modal-layer" id="api-key-modal" hidden>
       <div class="modal-backdrop" data-close-api-modal></div>
