@@ -10,6 +10,7 @@ const indexFilePath = path.join(publicDirectory, "index.html");
 const projectsDirectory = path.join(__dirname, "projects");
 const openAiApiHost = "api.openai.com";
 const openAiResponsesPath = "/v1/responses";
+const openAiImagesPath = "/v1/images/generations";
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -17,7 +18,9 @@ const contentTypes = {
 };
 const supportedDurations = [3, 4, 5];
 const projectAssetFolderNames = ["scripts", "images", "videos", "voices"];
+const imageOutputFormat = "png";
 let scriptRequestSequence = 0;
+let imageRequestSequence = 0;
 
 /**
  * 서버 터미널 확인용 로그를 공통 형식으로 출력한다.
@@ -138,6 +141,39 @@ function validateScriptRequestPayload(requestBody) {
 }
 
 /**
+ * 이미지 생성 요청값이 현재 허용 범위와 맞는지 확인한다.
+ */
+function validateImageRequestPayload(requestBody) {
+  const topic = typeof requestBody.topic === "string" ? requestBody.topic.trim() : "";
+  const imagePrompt = typeof requestBody.imagePrompt === "string" ? requestBody.imagePrompt.trim() : "";
+  const openaiApiKey = typeof requestBody.openaiApiKey === "string" ? requestBody.openaiApiKey.trim() : "";
+  const sceneIndex = Number.parseInt(String(requestBody.sceneIndex), 10);
+
+  if (!topic) {
+    throw new Error("프로젝트 주제를 확인할 수 없습니다.");
+  }
+
+  if (!imagePrompt) {
+    throw new Error("이미지 생성용 프롬프트가 필요합니다.");
+  }
+
+  if (!openaiApiKey) {
+    throw new Error("OpenAI API 키가 필요합니다.");
+  }
+
+  if (Number.isNaN(sceneIndex) || sceneIndex < 0) {
+    throw new Error("생성할 장면 번호가 올바르지 않습니다.");
+  }
+
+  return {
+    topic,
+    imagePrompt,
+    openaiApiKey,
+    sceneIndex,
+  };
+}
+
+/**
  * 프로젝트 폴더 이름으로 사용할 수 있도록 주제를 정리한다.
  */
 function sanitizeProjectFolderName(topic) {
@@ -159,11 +195,13 @@ function createProjectStoragePaths(topic) {
   const projectFolderName = sanitizeProjectFolderName(topic);
   const projectDirectory = path.join(projectsDirectory, projectFolderName);
   const scriptsDirectory = path.join(projectDirectory, "scripts");
+  const imagesDirectory = path.join(projectDirectory, "images");
 
   return {
     projectFolderName,
     projectDirectory,
     scriptsDirectory,
+    imagesDirectory,
     scriptFilePath: path.join(scriptsDirectory, "scene-script.json"),
   };
 }
@@ -193,6 +231,7 @@ async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
   const storagePaths = await ensureProjectDirectories(scriptRequest.topic);
   const scriptFilePayload = {
     projectTopic: scriptRequest.topic,
+    projectFolderName: storagePaths.projectFolderName,
     tone: scriptRequest.tone,
     style: scriptRequest.style,
     sceneCount: sceneItems.length,
@@ -207,6 +246,26 @@ async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
   );
 
   return storagePaths;
+}
+
+/**
+ * 생성된 장면 이미지를 프로젝트 폴더 안의 파일로 저장한다.
+ */
+async function saveSceneImageToProject(imageRequest, imageBase64, outputFormat) {
+  const storagePaths = await ensureProjectDirectories(imageRequest.topic);
+  const normalizedFormat = outputFormat === "jpeg" ? "jpeg" : "png";
+  const sceneNumber = String(imageRequest.sceneIndex + 1).padStart(2, "0");
+  const imageFileName = `scene-${sceneNumber}.${normalizedFormat}`;
+  const imageFilePath = path.join(storagePaths.imagesDirectory, imageFileName);
+  const imageBytes = Buffer.from(imageBase64, "base64");
+
+  await fs.promises.writeFile(imageFilePath, imageBytes);
+
+  return {
+    ...storagePaths,
+    imageFileName,
+    imageFilePath,
+  };
 }
 
 /**
@@ -379,6 +438,96 @@ function requestOpenAiSceneScripts(scriptRequest, requestId) {
 }
 
 /**
+ * OpenAI Image API에 장면 이미지 생성을 요청한다.
+ */
+function requestOpenAiSceneImage(imageRequest, requestId) {
+  return new Promise((resolve, reject) => {
+    logServerEvent(`[이미지 생성 ${requestId}] OpenAI Image API 요청 시작`, {
+      model: "gpt-image-2",
+      sceneIndex: imageRequest.sceneIndex,
+    });
+
+    const requestPayload = JSON.stringify({
+      model: "gpt-image-2",
+      prompt: imageRequest.imagePrompt,
+      size: "1024x1024",
+      quality: "medium",
+      output_format: imageOutputFormat,
+    });
+
+    const apiRequest = https.request(
+      {
+        hostname: openAiApiHost,
+        path: openAiImagesPath,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${imageRequest.openaiApiKey}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(requestPayload),
+        },
+      },
+      (apiResponse) => {
+        const responseChunks = [];
+
+        apiResponse.on("data", (chunk) => {
+          responseChunks.push(chunk);
+        });
+
+        apiResponse.on("end", () => {
+          try {
+            const rawResponse = Buffer.concat(responseChunks).toString("utf8");
+            const parsedResponse = JSON.parse(rawResponse);
+            logServerEvent(`[이미지 생성 ${requestId}] OpenAI 응답 수신`, {
+              statusCode: apiResponse.statusCode || 0,
+            });
+
+            if (apiResponse.statusCode && apiResponse.statusCode >= 400) {
+              const errorMessage = parsedResponse.error?.message || "OpenAI 이미지 생성 요청에 실패했습니다.";
+              logServerEvent(`[이미지 생성 ${requestId}] OpenAI 요청 실패`, {
+                statusCode: apiResponse.statusCode,
+                message: errorMessage,
+              });
+              reject(new Error(errorMessage));
+              return;
+            }
+
+            const imageItem = Array.isArray(parsedResponse.data) ? parsedResponse.data[0] : null;
+
+            if (!imageItem || typeof imageItem.b64_json !== "string") {
+              throw new Error("생성된 이미지 응답이 비어 있습니다.");
+            }
+
+            logServerEvent(`[이미지 생성 ${requestId}] OpenAI 응답 해석 완료`, {
+              hasRevisedPrompt: typeof imageItem.revised_prompt === "string" && imageItem.revised_prompt.length > 0,
+            });
+            resolve({
+              base64: imageItem.b64_json,
+              revisedPrompt: typeof imageItem.revised_prompt === "string" ? imageItem.revised_prompt : "",
+              outputFormat: imageOutputFormat,
+            });
+          } catch (error) {
+            logServerEvent(`[이미지 생성 ${requestId}] OpenAI 응답 해석 실패`, {
+              message: error instanceof Error ? error.message : "알 수 없는 오류",
+            });
+            reject(new Error(error instanceof Error ? error.message : "OpenAI 이미지 응답을 해석하지 못했습니다."));
+          }
+        });
+      }
+    );
+
+    apiRequest.on("error", (error) => {
+      logServerEvent(`[이미지 생성 ${requestId}] OpenAI 통신 오류`, {
+        message: error instanceof Error ? error.message : "알 수 없는 오류",
+      });
+      reject(new Error("OpenAI API 통신 중 오류가 발생했습니다."));
+    });
+
+    apiRequest.write(requestPayload);
+    apiRequest.end();
+  });
+}
+
+/**
  * Responses API 응답에서 최종 텍스트 출력을 추출한다.
  */
 function extractOutputText(apiResponsePayload) {
@@ -447,6 +596,58 @@ async function handleGenerateScriptRequest(request, response) {
 }
 
 /**
+ * 장면 이미지 생성 API 요청을 처리한다.
+ */
+async function handleGenerateImageRequest(request, response) {
+  const requestId = String(++imageRequestSequence).padStart(3, "0");
+
+  try {
+    logServerEvent(`[이미지 생성 ${requestId}] 요청 수신`);
+    const requestBody = await readJsonBody(request);
+    const validatedPayload = validateImageRequestPayload(requestBody);
+    logServerEvent(`[이미지 생성 ${requestId}] 요청 검증 완료`, {
+      topic: validatedPayload.topic,
+      sceneIndex: validatedPayload.sceneIndex,
+      hasOpenAiApiKey: Boolean(validatedPayload.openaiApiKey),
+    });
+
+    const generatedImage = await requestOpenAiSceneImage(validatedPayload, requestId);
+    const projectStorage = await saveSceneImageToProject(
+      validatedPayload,
+      generatedImage.base64,
+      generatedImage.outputFormat
+    );
+
+    logServerEvent(`[이미지 생성 ${requestId}] 프로젝트 저장 완료`, {
+      projectFolderName: projectStorage.projectFolderName,
+      imageFilePath: projectStorage.imageFilePath,
+    });
+    logServerEvent(`[이미지 생성 ${requestId}] 응답 반환 완료`, {
+      sceneIndex: validatedPayload.sceneIndex,
+    });
+
+    sendJson(response, 200, {
+      image: {
+        base64: generatedImage.base64,
+        outputFormat: generatedImage.outputFormat,
+        revisedPrompt: generatedImage.revisedPrompt,
+        filePath: projectStorage.imageFilePath,
+      },
+      project: {
+        folderName: projectStorage.projectFolderName,
+      },
+    });
+  } catch (error) {
+    logServerEvent(`[이미지 생성 ${requestId}] 요청 처리 실패`, {
+      message: error instanceof Error ? error.message : "이미지 생성 요청에 실패했습니다.",
+    });
+    sendJson(response, 400, {
+      error: error instanceof Error ? error.message : "이미지 생성 요청에 실패했습니다.",
+    });
+  }
+}
+
+/**
  * 요청 경로에 따라 기본 응답을 분기한다.
  */
 function handleRequest(request, response) {
@@ -454,6 +655,11 @@ function handleRequest(request, response) {
 
   if (request.method === "POST" && requestPath === "/api/script/generate") {
     handleGenerateScriptRequest(request, response);
+    return;
+  }
+
+  if (request.method === "POST" && requestPath === "/api/image/generate") {
+    handleGenerateImageRequest(request, response);
     return;
   }
 

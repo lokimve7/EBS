@@ -20,6 +20,10 @@ const apiKeyVisibilityButtons = document.querySelectorAll("[data-toggle-api-visi
 const apiKeyStorageKey = "ebsApiKeySettings";
 let lastFocusedElement = null;
 let latestGeneratedScenes = [];
+let currentProjectInfo = {
+  topic: topicInput ? topicInput.value.trim() : "",
+  folderName: topicInput ? sanitizeProjectFolderName(topicInput.value) : "",
+};
 
 /**
  * 선택된 탭에 맞춰 보이는 내용 영역만 전환한다.
@@ -81,6 +85,32 @@ function syncSceneCount(nextValue) {
   }
 
   sceneCountInput.value = String(clampSceneCount(nextValue));
+}
+
+/**
+ * 서버와 같은 규칙으로 프로젝트 폴더 이름을 정리한다.
+ */
+function sanitizeProjectFolderName(topicValue) {
+  const normalizedTopic = String(topicValue || "").normalize("NFC").trim();
+
+  return normalizedTopic
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[. ]+$/g, "")
+    .replace(/-+/g, "-")
+    .slice(0, 80) || "project";
+}
+
+/**
+ * 현재 작업 중인 프로젝트 정보를 화면 상태에 맞춰 갱신한다.
+ */
+function syncCurrentProjectInfo(topicValue, folderNameValue) {
+  const nextTopic = String(topicValue || "").trim();
+
+  currentProjectInfo = {
+    topic: nextTopic,
+    folderName: folderNameValue || sanitizeProjectFolderName(nextTopic),
+  };
 }
 
 /**
@@ -236,6 +266,37 @@ function setSceneStatus(message, statusType) {
 }
 
 /**
+ * 장면 데이터에 이미지 카드용 기본 상태를 채워 넣는다.
+ */
+function normalizeSceneItem(sceneItem) {
+  return {
+    ...sceneItem,
+    imageStatus: sceneItem?.imageStatus || "idle",
+    imageError: sceneItem?.imageError || "",
+    generatedImageDataUrl: sceneItem?.generatedImageDataUrl || "",
+    generatedImagePath: sceneItem?.generatedImagePath || "",
+  };
+}
+
+/**
+ * 특정 장면의 이미지 상태만 부분 갱신한다.
+ */
+function updateSceneImageState(sceneIndex, nextState) {
+  const targetScene = latestGeneratedScenes[sceneIndex];
+
+  if (!targetScene) {
+    return;
+  }
+
+  latestGeneratedScenes[sceneIndex] = {
+    ...targetScene,
+    ...nextState,
+  };
+
+  renderImageSceneCards(latestGeneratedScenes);
+}
+
+/**
  * 저장된 프로젝트의 스크립트 설정값을 현재 입력칸에 반영한다.
  */
 function syncScriptSettingsFromProject(projectPayload) {
@@ -346,6 +407,10 @@ async function importProjectFile(fileObject) {
     const sceneItems = validateProjectFilePayload(projectPayload);
 
     syncScriptSettingsFromProject(projectPayload);
+    syncCurrentProjectInfo(
+      projectPayload.projectTopic || fileObject.name,
+      typeof projectPayload.projectFolderName === "string" ? projectPayload.projectFolderName : ""
+    );
     renderSceneCards(sceneItems);
     activateTab("script");
 
@@ -374,7 +439,7 @@ function renderSceneCards(sceneItems) {
     return;
   }
 
-  latestGeneratedScenes = sceneItems.map((sceneItem) => ({ ...sceneItem }));
+  latestGeneratedScenes = sceneItems.map((sceneItem) => normalizeSceneItem(sceneItem));
 
   sceneCardList.innerHTML = sceneItems
     .map((sceneItem, index) => {
@@ -417,6 +482,48 @@ function renderSceneCards(sceneItems) {
 }
 
 /**
+ * 이미지 카드 미리보기 영역 마크업을 현재 상태에 맞춰 반환한다.
+ */
+function renderImagePreviewMarkup(sceneItem, sceneOrderLabel) {
+  if (sceneItem.imageStatus === "loading") {
+    return `
+      <div class="image-preview image-preview--loading" aria-label="${sceneOrderLabel} 장면 이미지 생성 중">
+        <span class="image-preview__loading-spinner" aria-hidden="true"></span>
+        <p class="image-preview__loading-text">이미지를 생성하고 있습니다.</p>
+      </div>
+    `;
+  }
+
+  if (sceneItem.generatedImageDataUrl) {
+    return `
+      <div class="image-preview" aria-label="${sceneOrderLabel} 장면 생성 이미지">
+        <img
+          class="image-preview__image"
+          src="${sceneItem.generatedImageDataUrl}"
+          alt="${escapeHtml(sceneItem.summary)}"
+        />
+      </div>
+    `;
+  }
+
+  if (sceneItem.imageStatus === "error") {
+    return `
+      <div class="image-preview image-preview--empty image-preview--error" aria-label="${sceneOrderLabel} 장면 이미지 생성 실패">
+        <span class="image-preview__placeholder-icon" aria-hidden="true">!</span>
+        <p class="image-preview__placeholder-text">${escapeHtml(sceneItem.imageError || "이미지 생성에 실패했습니다.")}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="image-preview image-preview--empty" aria-label="${sceneOrderLabel} 장면 이미지 없음">
+      <span class="image-preview__placeholder-icon" aria-hidden="true">⌲</span>
+      <p class="image-preview__placeholder-text">이미지가 생성되지 않았습니다.</p>
+    </div>
+  `;
+}
+
+/**
  * 장면 데이터를 이미지 탭 카드 마크업으로 다시 그린다.
  */
 function renderImageSceneCards(sceneItems) {
@@ -430,20 +537,26 @@ function renderImageSceneCards(sceneItems) {
       const sceneOrderLabel = getSceneOrderLabel(index);
 
       return `
-        <article class="image-scene-card">
+        <article class="image-scene-card${sceneItem.imageStatus === "loading" ? " is-loading" : ""}">
           <div class="image-scene-card__header">
             <span class="image-scene-badge">SCENE ${sceneNumber}</span>
           </div>
           <p class="image-scene-card__description">${escapeHtml(sceneItem.summary)}</p>
-          <div class="image-preview image-preview--empty" aria-label="${sceneOrderLabel} 장면 이미지 없음">
-            <span class="image-preview__placeholder-icon" aria-hidden="true">⌲</span>
-            <p class="image-preview__placeholder-text">이미지가 생성되지 않았습니다.</p>
-          </div>
+          ${renderImagePreviewMarkup(sceneItem, sceneOrderLabel)}
           <div class="image-scene-card__actions" aria-label="${sceneOrderLabel} 장면 이미지 버튼">
-            <button type="button" class="image-action-button image-action-button--primary">✦ 이미지 생성</button>
+            <button
+              type="button"
+              class="image-action-button image-action-button--primary"
+              data-image-generate-button
+              data-scene-index="${index}"
+              ${sceneItem.imageStatus === "loading" ? "disabled" : ""}
+            >
+              ${sceneItem.imageStatus === "loading" ? "생성 중..." : "✦ 이미지 생성"}
+            </button>
             <button type="button" class="image-action-button image-action-button--icon" aria-label="${sceneOrderLabel} 장면 다시 불러오기">↻</button>
             <button type="button" class="image-action-button image-action-button--icon" aria-label="${sceneOrderLabel} 장면 다운로드">↓</button>
           </div>
+          ${sceneItem.generatedImagePath ? `<p class="image-scene-card__saved-path">${escapeHtml(sceneItem.generatedImagePath)}</p>` : ""}
         </article>
       `;
     })
@@ -460,6 +573,113 @@ function escapeHtml(textValue) {
     .replaceAll(">", "&gt;")
     .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+/**
+ * 이미지 생성 응답의 base64 결과를 data URL로 변환한다.
+ */
+function createImageDataUrl(imageBase64, outputFormat) {
+  const normalizedFormat = outputFormat === "jpeg" ? "jpeg" : "png";
+
+  return `data:image/${normalizedFormat};base64,${imageBase64}`;
+}
+
+/**
+ * 특정 장면의 이미지를 OpenAI API로 생성하고 카드 상태를 갱신한다.
+ */
+async function generateImageForScene(sceneIndex) {
+  const sceneItem = latestGeneratedScenes[sceneIndex];
+  const apiKeySettings = readStoredApiKeySettings();
+  const activeTopic = currentProjectInfo.topic || (topicInput ? topicInput.value.trim() : "");
+
+  if (!sceneItem) {
+    return;
+  }
+
+  if (!sceneItem.imagePrompt) {
+    updateSceneImageState(sceneIndex, {
+      imageStatus: "error",
+      imageError: "이미지 생성용 프롬프트가 아직 없습니다. 먼저 스크립트를 생성해 주세요.",
+      generatedImageDataUrl: "",
+      generatedImagePath: "",
+    });
+    activateTab("image");
+    return;
+  }
+
+  if (!activeTopic) {
+    updateSceneImageState(sceneIndex, {
+      imageStatus: "error",
+      imageError: "프로젝트 주제를 확인할 수 없습니다. 먼저 스크립트를 생성하거나 프로젝트를 불러와 주세요.",
+      generatedImageDataUrl: "",
+      generatedImagePath: "",
+    });
+    return;
+  }
+
+  if (!apiKeySettings.openaiApiKey) {
+    setSceneStatus("OpenAI API 키를 먼저 설정해 주세요.", "error");
+    openApiKeyModal();
+    return;
+  }
+
+  syncCurrentProjectInfo(activeTopic, currentProjectInfo.folderName);
+  updateSceneImageState(sceneIndex, {
+    imageStatus: "loading",
+    imageError: "",
+  });
+
+  try {
+    const response = await window.fetch("/api/image/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        topic: activeTopic,
+        sceneIndex,
+        imagePrompt: sceneItem.imagePrompt,
+        openaiApiKey: apiKeySettings.openaiApiKey,
+      }),
+    });
+
+    const rawResponseText = await response.text();
+    let responseData = {};
+
+    try {
+      responseData = rawResponseText ? JSON.parse(rawResponseText) : {};
+    } catch (error) {
+      throw new Error(rawResponseText || "이미지 생성 응답을 읽지 못했습니다.");
+    }
+
+    if (!response.ok) {
+      throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
+    }
+
+    const generatedImageBase64 = typeof responseData.image?.base64 === "string" ? responseData.image.base64 : "";
+    const outputFormat = typeof responseData.image?.outputFormat === "string" ? responseData.image.outputFormat : "png";
+    const generatedImagePath = typeof responseData.image?.filePath === "string" ? responseData.image.filePath : "";
+
+    if (!generatedImageBase64) {
+      throw new Error("생성된 이미지 데이터를 읽지 못했습니다.");
+    }
+
+    updateSceneImageState(sceneIndex, {
+      imageStatus: "success",
+      imageError: "",
+      generatedImageDataUrl: createImageDataUrl(generatedImageBase64, outputFormat),
+      generatedImagePath,
+    });
+
+    setSceneStatus(`SCENE ${String(sceneIndex + 1).padStart(2, "0")} 이미지 생성을 완료했습니다.`, "success");
+  } catch (error) {
+    updateSceneImageState(sceneIndex, {
+      imageStatus: "error",
+      imageError: error instanceof Error ? error.message : "이미지 생성에 실패했습니다.",
+      generatedImageDataUrl: "",
+      generatedImagePath: "",
+    });
+  }
 }
 
 /**
@@ -510,6 +730,10 @@ async function generateScenesFromApi() {
     }
 
     const generatedScenes = Array.isArray(responseData.scenes) ? responseData.scenes : [];
+    syncCurrentProjectInfo(
+      scriptPayload.topic,
+      typeof responseData.project?.folderName === "string" ? responseData.project.folderName : ""
+    );
     renderSceneCards(generatedScenes);
     setSceneStatus(`${generatedScenes.length}개의 장면 스크립트를 생성했습니다.`, "success");
   } catch (error) {
@@ -526,7 +750,10 @@ tabButtons.forEach((button) => {
 });
 
 if (topicInput) {
-  topicInput.addEventListener("input", syncTopicCount);
+  topicInput.addEventListener("input", () => {
+    syncTopicCount();
+    syncCurrentProjectInfo(topicInput.value, currentProjectInfo.folderName);
+  });
   syncTopicCount();
 }
 
@@ -558,6 +785,26 @@ if (sceneCountInput) {
 if (generateScriptButton) {
   generateScriptButton.addEventListener("click", () => {
     generateScenesFromApi();
+  });
+}
+
+if (imageSceneRail) {
+  imageSceneRail.addEventListener("click", (event) => {
+    const generateButton = event.target instanceof HTMLElement
+      ? event.target.closest("[data-image-generate-button]")
+      : null;
+
+    if (!generateButton) {
+      return;
+    }
+
+    const sceneIndex = Number.parseInt(generateButton.dataset.sceneIndex || "", 10);
+
+    if (Number.isNaN(sceneIndex)) {
+      return;
+    }
+
+    generateImageForScene(sceneIndex);
   });
 }
 
@@ -607,6 +854,6 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-latestGeneratedScenes = collectScenesFromMarkup();
+latestGeneratedScenes = collectScenesFromMarkup().map((sceneItem) => normalizeSceneItem(sceneItem));
 renderImageSceneCards(latestGeneratedScenes);
 activateTab("script");
