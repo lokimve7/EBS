@@ -1,0 +1,31 @@
+{
+  "projectTopic": "2026년 EBS 여행",
+  "projectFolderName": "2026년-EBS-여행",
+  "tone": "신나는",
+  "style": "브이로그",
+  "sceneCount": 3,
+  "savedAt": "2026-07-06T06:30:24.926Z",
+  "scenes": [
+    {
+      "summary": "2026년 EBS 여행의 시작, 설레는 마음으로 기차역에 도착해 출발 준비를 하는 장면",
+      "narration": "2026년, 드디어 EBS 여행 출발! 오늘 완전 기대돼요!",
+      "durationSeconds": 4,
+      "imagePrompt": "A cheerful Korean vlog scene at a modern train station in 2026, young traveler holding a small suitcase and EBS travel booklet, bright morning light, excited expression, cinematic but casual vlog style, vibrant colors",
+      "videoPrompt": "Handheld vlog-style shot entering a modern train station, traveler waves to the camera with a suitcase, energetic movement, bright morning atmosphere, quick zoom-in on EBS travel booklet, upbeat travel vlog mood"
+    },
+    {
+      "summary": "이동 중 창밖 풍경과 EBS 여행 코스를 확인하며 들뜬 분위기를 보여주는 장면",
+      "narration": "창밖 풍경 보면서 오늘 코스 체크! 벌써 힐링 시작이에요.",
+      "durationSeconds": 5,
+      "imagePrompt": "Inside a clean modern train, Korean traveler looking out the window at beautiful countryside scenery, holding a tablet showing an EBS travel route map, sunny day, joyful vlog atmosphere, natural light",
+      "videoPrompt": "Vlog-style train interior shot, camera pans from passing countryside outside the window to a tablet displaying an EBS travel itinerary, traveler smiles and points at the route, smooth handheld motion, lively and exciting mood"
+    },
+    {
+      "summary": "여행지에 도착해 랜드마크 앞에서 활기차게 즐기며 브이로그 엔딩을 찍는 장면",
+      "narration": "도착 완료! EBS 여행, 진짜 알차고 신나요. 다음 코스도 같이 가요!",
+      "durationSeconds": 5,
+      "imagePrompt": "Excited Korean traveler filming a vlog in front of a scenic travel landmark, colorful street, lively atmosphere, 2026 travel vibe, holding a camera, bright daylight, energetic and fun",
+      "videoPrompt": "Dynamic handheld vlog shot at a popular scenic landmark, traveler spins around smiling, shows the colorful street and landmark behind, ends with a friendly wave to the camera, upbeat energetic travel vlog style"
+    }
+  ]
+}

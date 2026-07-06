@@ -269,12 +269,17 @@ function setSceneStatus(message, statusType) {
  * 장면 데이터에 이미지 카드용 기본 상태를 채워 넣는다.
  */
 function normalizeSceneItem(sceneItem) {
+  const generatedImageWebPath = sceneItem?.generatedImageWebPath || "";
+  const generatedImageDataUrl = sceneItem?.generatedImageDataUrl || "";
+  const hasGeneratedImage = Boolean(generatedImageDataUrl || generatedImageWebPath);
+
   return {
     ...sceneItem,
-    imageStatus: sceneItem?.imageStatus || "idle",
+    imageStatus: sceneItem?.imageStatus || (hasGeneratedImage ? "success" : "idle"),
     imageError: sceneItem?.imageError || "",
-    generatedImageDataUrl: sceneItem?.generatedImageDataUrl || "",
+    generatedImageDataUrl,
     generatedImagePath: sceneItem?.generatedImagePath || "",
+    generatedImageWebPath,
   };
 }
 
@@ -359,6 +364,98 @@ function validateProjectFilePayload(projectPayload) {
 }
 
 /**
+ * 프로젝트 폴더와 상대 경로를 브라우저에서 열 수 있는 서버 경로로 바꾼다.
+ */
+function createProjectAssetWebPath(projectFolderName, relativeFilePath) {
+  const normalizedFolderName = String(projectFolderName || "").trim();
+  const normalizedRelativePath = String(relativeFilePath || "").replaceAll("\\", "/").replace(/^\/+/, "");
+
+  if (!normalizedFolderName || !normalizedRelativePath) {
+    throw new Error("프로젝트 파일 경로 정보가 올바르지 않습니다.");
+  }
+
+  const encodedPathSegments = normalizedRelativePath
+    .split("/")
+    .filter(Boolean)
+    .map((pathSegment) => encodeURIComponent(pathSegment))
+    .join("/");
+
+  return `/projects/${encodeURIComponent(normalizedFolderName)}/${encodedPathSegments}`;
+}
+
+/**
+ * 서버에 저장된 스크립트 JSON 파일을 읽어 장면 데이터를 복원한다.
+ */
+async function readProjectScriptFile(projectPayload) {
+  if (typeof projectPayload.scriptFilePath !== "string" || !projectPayload.scriptFilePath.trim()) {
+    throw new Error("프로젝트 대표 파일에 스크립트 파일 정보가 없습니다.");
+  }
+
+  if (typeof projectPayload.projectFolderName !== "string" || !projectPayload.projectFolderName.trim()) {
+    throw new Error("프로젝트 대표 파일에 프로젝트 폴더 정보가 없습니다.");
+  }
+
+  const scriptFileResponse = await window.fetch(
+    createProjectAssetWebPath(projectPayload.projectFolderName, projectPayload.scriptFilePath)
+  );
+
+  if (!scriptFileResponse.ok) {
+    throw new Error("프로젝트에 연결된 스크립트 파일을 읽지 못했습니다.");
+  }
+
+  const scriptPayload = await scriptFileResponse.json();
+  return validateProjectFilePayload(scriptPayload);
+}
+
+/**
+ * 프로젝트 대표 파일의 이미지 참조 정보를 장면 데이터에 합친다.
+ */
+function mergeProjectImageState(sceneItems, projectPayload) {
+  const imageItems = Array.isArray(projectPayload.images) ? projectPayload.images : [];
+
+  return sceneItems.map((sceneItem, sceneIndex) => {
+    const matchedImageItem = imageItems.find((imageItem) => imageItem?.sceneIndex === sceneIndex);
+
+    if (!matchedImageItem || typeof matchedImageItem.filePath !== "string" || !matchedImageItem.filePath.trim()) {
+      return normalizeSceneItem(sceneItem);
+    }
+
+    return normalizeSceneItem({
+      ...sceneItem,
+      imageStatus: "success",
+      generatedImagePath: matchedImageItem.filePath,
+      generatedImageWebPath: createProjectAssetWebPath(
+        projectPayload.projectFolderName,
+        matchedImageItem.filePath
+      ),
+    });
+  });
+}
+
+/**
+ * 선택한 JSON이 프로젝트 대표 파일인지 스크립트 전용 파일인지 구분한다.
+ */
+function detectProjectFileKind(projectPayload) {
+  if (!projectPayload || typeof projectPayload !== "object") {
+    return "unknown";
+  }
+
+  if (typeof projectPayload.scriptFilePath === "string") {
+    return "project-state";
+  }
+
+  const sceneItems = Array.isArray(projectPayload.scenes) ? projectPayload.scenes : [];
+  const hasEmbeddedImageState = sceneItems.some(
+    (sceneItem) =>
+      typeof sceneItem?.generatedImagePath === "string" ||
+      typeof sceneItem?.generatedImageWebPath === "string" ||
+      typeof sceneItem?.imageStatus === "string"
+  );
+
+  return hasEmbeddedImageState ? "legacy-project-state" : "script-only";
+}
+
+/**
  * 현재 스크립트 탭의 카드 마크업에서 장면 데이터를 읽어 초기 상태를 맞춘다.
  */
 function collectScenesFromMarkup() {
@@ -404,7 +501,10 @@ async function importProjectFile(fileObject) {
       throw new Error("JSON 형식의 프로젝트 파일만 불러올 수 있습니다.");
     }
 
-    const sceneItems = validateProjectFilePayload(projectPayload);
+    const projectFileKind = detectProjectFileKind(projectPayload);
+    const sceneItems = projectFileKind === "project-state"
+      ? mergeProjectImageState(await readProjectScriptFile(projectPayload), projectPayload)
+      : validateProjectFilePayload(projectPayload);
 
     syncScriptSettingsFromProject(projectPayload);
     syncCurrentProjectInfo(
@@ -417,8 +517,14 @@ async function importProjectFile(fileObject) {
     const projectName = typeof projectPayload.projectTopic === "string" && projectPayload.projectTopic.trim()
       ? projectPayload.projectTopic.trim()
       : fileObject.name;
+    const hasRestorableImageState = projectFileKind === "project-state" || projectFileKind === "legacy-project-state";
 
-    setSceneStatus(`${projectName} 프로젝트의 장면 ${sceneItems.length}개를 불러왔습니다.`, "success");
+    setSceneStatus(
+      hasRestorableImageState
+        ? `${projectName} 프로젝트의 장면 ${sceneItems.length}개와 이미지 상태를 불러왔습니다.`
+        : `${projectName} 스크립트 파일을 불러왔습니다. 이 파일에는 이미지 복원 상태가 없어 이미지 탭은 기본 상태로 표시됩니다.`,
+      hasRestorableImageState ? "success" : "loading"
+    );
   } catch (error) {
     setSceneStatus(
       error instanceof Error ? error.message : "프로젝트 파일을 불러오지 못했습니다.",
@@ -494,12 +600,12 @@ function renderImagePreviewMarkup(sceneItem, sceneOrderLabel) {
     `;
   }
 
-  if (sceneItem.generatedImageDataUrl) {
+  if (sceneItem.generatedImageDataUrl || sceneItem.generatedImageWebPath) {
     return `
       <div class="image-preview" aria-label="${sceneOrderLabel} 장면 생성 이미지">
         <img
           class="image-preview__image"
-          src="${sceneItem.generatedImageDataUrl}"
+          src="${sceneItem.generatedImageDataUrl || sceneItem.generatedImageWebPath}"
           alt="${escapeHtml(sceneItem.summary)}"
         />
       </div>
@@ -637,6 +743,7 @@ async function generateImageForScene(sceneIndex) {
       },
       body: JSON.stringify({
         topic: activeTopic,
+        projectFolderName: currentProjectInfo.folderName,
         sceneIndex,
         imagePrompt: sceneItem.imagePrompt,
         openaiApiKey: apiKeySettings.openaiApiKey,
@@ -659,6 +766,7 @@ async function generateImageForScene(sceneIndex) {
     const generatedImageBase64 = typeof responseData.image?.base64 === "string" ? responseData.image.base64 : "";
     const outputFormat = typeof responseData.image?.outputFormat === "string" ? responseData.image.outputFormat : "png";
     const generatedImagePath = typeof responseData.image?.filePath === "string" ? responseData.image.filePath : "";
+    const generatedImageWebPath = typeof responseData.image?.webPath === "string" ? responseData.image.webPath : "";
 
     if (!generatedImageBase64) {
       throw new Error("생성된 이미지 데이터를 읽지 못했습니다.");
@@ -669,6 +777,7 @@ async function generateImageForScene(sceneIndex) {
       imageError: "",
       generatedImageDataUrl: createImageDataUrl(generatedImageBase64, outputFormat),
       generatedImagePath,
+      generatedImageWebPath,
     });
 
     setSceneStatus(`SCENE ${String(sceneIndex + 1).padStart(2, "0")} 이미지 생성을 완료했습니다.`, "success");
@@ -752,7 +861,7 @@ tabButtons.forEach((button) => {
 if (topicInput) {
   topicInput.addEventListener("input", () => {
     syncTopicCount();
-    syncCurrentProjectInfo(topicInput.value, currentProjectInfo.folderName);
+    syncCurrentProjectInfo(topicInput.value);
   });
   syncTopicCount();
 }

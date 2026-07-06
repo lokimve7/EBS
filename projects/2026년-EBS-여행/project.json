@@ -1,0 +1,15 @@
+{
+  "projectTopic": "2026년 EBS 여행",
+  "projectFolderName": "2026년-EBS-여행",
+  "tone": "신나는",
+  "style": "브이로그",
+  "sceneCount": 3,
+  "savedAt": "2026-07-06T06:31:57.429Z",
+  "scriptFilePath": "scripts/scene-script.json",
+  "images": [
+    {
+      "sceneIndex": 2,
+      "filePath": "images/scene-03.png"
+    }
+  ]
+}
