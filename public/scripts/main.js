@@ -7,6 +7,7 @@ const stepperButtons = document.querySelectorAll("[data-stepper-action]");
 const generateScriptButton = document.querySelector("#generate-script-button");
 const generateButtonLabel = document.querySelector(".generate-button__label");
 const sceneCardList = document.querySelector("#scene-card-list");
+const imageSceneRail = document.querySelector("#image-scene-rail");
 const sceneStatusBanner = document.querySelector("#scene-status-banner");
 const openProjectFileButton = document.querySelector("#open-project-file-button");
 const projectFileInput = document.querySelector("#project-file-input");
@@ -80,6 +81,15 @@ function syncSceneCount(nextValue) {
   }
 
   sceneCountInput.value = String(clampSceneCount(nextValue));
+}
+
+/**
+ * 숫자를 장면 순서 안내 문구로 변환한다.
+ */
+function getSceneOrderLabel(sceneIndex) {
+  const sceneOrderLabels = ["첫 번째", "두 번째", "세 번째", "네 번째", "다섯 번째", "여섯 번째", "일곱 번째", "여덟 번째", "아홉 번째", "열 번째"];
+
+  return sceneOrderLabels[sceneIndex] || `${sceneIndex + 1}번째`;
 }
 
 /**
@@ -288,6 +298,32 @@ function validateProjectFilePayload(projectPayload) {
 }
 
 /**
+ * 현재 스크립트 탭의 카드 마크업에서 장면 데이터를 읽어 초기 상태를 맞춘다.
+ */
+function collectScenesFromMarkup() {
+  if (!sceneCardList) {
+    return [];
+  }
+
+  const sceneCardElements = sceneCardList.querySelectorAll(".scene-card");
+
+  return Array.from(sceneCardElements, (sceneCardElement) => {
+    const summaryText = sceneCardElement.querySelector(".scene-column:first-of-type .scene-text-box p")?.textContent?.trim() || "";
+    const narrationText = sceneCardElement.querySelector(".scene-column:nth-of-type(2) .scene-text-box p")?.textContent?.trim() || "";
+    const durationText = sceneCardElement.querySelector(".duration-box")?.textContent?.trim() || "";
+    const durationMatch = durationText.match(/\d+/);
+
+    return {
+      summary: summaryText,
+      narration: narrationText,
+      durationSeconds: durationMatch ? Number.parseInt(durationMatch[0], 10) : 0,
+      imagePrompt: "",
+      videoPrompt: "",
+    };
+  }).filter((sceneItem) => sceneItem.summary);
+}
+
+/**
  * 사용자가 선택한 프로젝트 파일을 읽어 장면 카드와 입력값을 복원한다.
  */
 async function importProjectFile(fileObject) {
@@ -371,6 +407,42 @@ function renderSceneCards(sceneItems) {
             <button type="button" class="scene-action scene-action--edit">편집</button>
             <button type="button" class="scene-action scene-action--retry">재생성</button>
             <button type="button" class="scene-action scene-action--delete">삭제</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  renderImageSceneCards(latestGeneratedScenes);
+}
+
+/**
+ * 장면 데이터를 이미지 탭 카드 마크업으로 다시 그린다.
+ */
+function renderImageSceneCards(sceneItems) {
+  if (!imageSceneRail) {
+    return;
+  }
+
+  imageSceneRail.innerHTML = sceneItems
+    .map((sceneItem, index) => {
+      const sceneNumber = String(index + 1).padStart(2, "0");
+      const sceneOrderLabel = getSceneOrderLabel(index);
+
+      return `
+        <article class="image-scene-card">
+          <div class="image-scene-card__header">
+            <span class="image-scene-badge">SCENE ${sceneNumber}</span>
+          </div>
+          <p class="image-scene-card__description">${escapeHtml(sceneItem.summary)}</p>
+          <div class="image-preview image-preview--empty" aria-label="${sceneOrderLabel} 장면 이미지 없음">
+            <span class="image-preview__placeholder-icon" aria-hidden="true">⌲</span>
+            <p class="image-preview__placeholder-text">이미지가 생성되지 않았습니다.</p>
+          </div>
+          <div class="image-scene-card__actions" aria-label="${sceneOrderLabel} 장면 이미지 버튼">
+            <button type="button" class="image-action-button image-action-button--primary">✦ 이미지 생성</button>
+            <button type="button" class="image-action-button image-action-button--icon" aria-label="${sceneOrderLabel} 장면 다시 불러오기">↻</button>
+            <button type="button" class="image-action-button image-action-button--icon" aria-label="${sceneOrderLabel} 장면 다운로드">↓</button>
           </div>
         </article>
       `;
@@ -535,4 +607,6 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
+latestGeneratedScenes = collectScenesFromMarkup();
+renderImageSceneCards(latestGeneratedScenes);
 activateTab("script");
