@@ -1,0 +1,32 @@
+{
+  "projectTopic": "2002년 대한민국 과거 여행",
+  "projectId": "project-ad7b471c2114",
+  "projectFolderName": "project-ad7b471c2114-2002년-대한민국-과거-여행",
+  "tone": "신나는",
+  "style": "브이로그",
+  "sceneCount": 3,
+  "savedAt": "2026-07-21T12:11:57.923Z",
+  "scenes": [
+    {
+      "summary": "타임머신을 타고 2002년 서울 거리 한복판에 도착한 브이로그 오프닝",
+      "narration": "여러분, 저 지금 2002년 서울에 도착했어요! 거리 분위기부터 완전 뜨겁습니다!",
+      "durationSeconds": 5,
+      "imagePrompt": "A cheerful Korean vlog scene in Seoul, South Korea in 2002, busy street with retro buses, flip phones, old shop signs, people in early 2000s fashion, bright summer daylight, handheld camera look, energetic atmosphere, realistic documentary style",
+      "videoPrompt": "Handheld vlog camera arrives on a busy Seoul street in 2002, quick pan showing retro buses, old storefront signs, people in early 2000s clothes, energetic crowd movement, bright and exciting mood, realistic vlog footage"
+    },
+    {
+      "summary": "붉은 티셔츠를 입은 사람들과 월드컵 응원 열기 속으로 뛰어드는 장면",
+      "narration": "와, 온 거리가 붉은 물결이에요! 대한민국 응원 소리가 진짜 몸으로 느껴져요!",
+      "durationSeconds": 5,
+      "imagePrompt": "Excited Korean World Cup street cheering scene in 2002, crowds wearing red shirts, Korean flags, face paint, cheering sticks, festive city square, joyful expressions, vlog selfie perspective, vibrant colors, realistic photo style",
+      "videoPrompt": "Vlog-style footage moving through a huge 2002 Korea World Cup cheering crowd, people in red shirts waving Korean flags, chanting and jumping, camera shakes with excitement, bright festive atmosphere"
+    },
+    {
+      "summary": "2002년 감성의 분식집과 거리 간식을 즐기며 하루를 마무리하는 장면",
+      "narration": "응원하고 먹는 떡볶이 한 입! 2002년 감성, 이거 완전 최고예요!",
+      "durationSeconds": 4,
+      "imagePrompt": "Cozy Korean street food stall in 2002, tteokbokki, fish cake soup, kimbap, old plastic chairs, retro menu signs, warm evening lights, young vlogger smiling with food, nostalgic and lively mood, realistic vlog photography",
+      "videoPrompt": "Handheld vlog shot at a nostalgic 2002 Korean street food stall, close-up of spicy tteokbokki and fish cake soup, vlogger picks up food with chopsticks, warm evening lights, happy upbeat ending"
+    }
+  ]
+}

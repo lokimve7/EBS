@@ -22,6 +22,10 @@
 | 01-13 | [Tasks/01-13.md](../Tasks/01-13.md) | 프로젝트 대표 상태 파일을 `project.json`으로 분리하고, `scripts/scene-script.json`은 스크립트 전용으로 유지하면서 프로젝트 불러오기와 이미지 상태 복원이 계속 동작하게 한다. | 완료 |
 | 01-14 | [Tasks/01-14.md](../Tasks/01-14.md) | `Layout/03_layout_video.png`를 참고해 비디오 탭의 하단 내용 영역을 이미지 탭과 거의 같은 구조의 장면별 영상 카드 목록 화면으로 구성하고, 카드의 미리보기 영역은 영상 상태에 맞는 형태로 보이게 한다. | 완료 |
 | 01-15 | [Tasks/01-15.md](../Tasks/01-15.md) | 비디오 탭의 각 씬 카드에서 `✦ 영상 생성` 버튼을 누르면 해당 장면의 이미지와 영상 생성 프롬프트를 EvoLink.AI의 Kling 영상 생성 요청에 전달하고, 생성 중 상태와 완료 영상을 카드에 표시하며, 결과 영상을 프로젝트 폴더에 저장하고 불러오기 시 복원한다. | 완료 |
+| 01-16 | [Tasks/01-16.md](../Tasks/01-16.md) | SQLite 기반 프로젝트 정보 저장 구조를 추가하고, 서버 시작 시 DB 파일과 프로젝트 기본 정보 테이블이 없으면 자동 생성되게 하며, 기존 `projects/` 폴더 저장 구조는 유지한다. | 완료 |
+| 01-17 | [Tasks/01-17.md](../Tasks/01-17.md) | 이미지와 영상 파일은 기존처럼 로컬 프로젝트 폴더에 저장하고, DB에는 씬 번호, 결과 타입, URL, 생성 상태, 오류 메시지, 프롬프트를 저장하며 프론트엔드는 DB에서 받은 URL로 이미지와 영상을 표시하게 한다. | 완료 |
+| 01-18 | [Tasks/01-18.md](../Tasks/01-18.md) | 상단 `프로젝트 불러오기` 흐름을 파일 선택 방식에서 서버의 DB 프로젝트 목록 선택 방식으로 바꾸고, 다른 PC에서 접속한 사용자도 프로젝트 이름, 생성일, 수정일을 보고 선택해 스크립트와 이미지/영상 상태를 복원할 수 있게 한다. | 완료 |
+| 01-19 | [Tasks/01-19.md](../Tasks/01-19.md) | 여러 사람이 같은 서버에 접속해 프로젝트를 만들거나 불러와도 프로젝트 고유 ID를 기준으로 저장 경로, DB 데이터, 이미지/영상 파일명이 구분되고 서로 다른 프로젝트 상태가 덮어써지지 않게 한다. | 완료 |
 
 
 ## 상태 범례
@@ -32,6 +36,19 @@
 - `차단됨`: 오류, 필수 정보 누락, 외부 의존성 문제 등으로 정상 진행이 막힌 상태
 
 ## 최근 작업 로그
+- 2026-07-21: `01-19`에서 `database.js`, `server.js`, `public/scripts/main.js`에 프로젝트 고유 ID 저장/전달, ID 기반 DB 결과 조회, ID와 결과 타입을 포함한 이미지/영상 파일명, 프로젝트/씬 단위 오류 표시를 추가했고 `node --check database.js`, `node --check server.js`, `node --check public/scripts/main.js`, DB 컬럼 직접 조회 점검을 완료했다.
+- 2026-07-21: `01-19`를 `진행중`으로 전환하고 프로젝트 고유 ID 기반 저장 경로와 DB 결과 구분 구현을 시작했다.
+- 2026-07-21: `Tasks/MAKE_REQUEST.md` 요청을 검토해 프로젝트 고유 ID 기반 저장 안정화가 `01-18` 다음 단계로 적합하고 범위가 과도하지 않다고 판단했으며, `01-19` 작업리스트와 task 문서를 추가했다.
+- 2026-07-21: 다른 PC에서 프로젝트를 불러올 때 영상이 로드되지 않는 문제를 확인하고, `server.js`의 mp4/webm 정적 응답에 `Accept-Ranges`와 `206 Partial Content` 처리를 추가했다.
+- 2026-07-21: `01-18`에서 `server.js`, `database.js`, `public/index.html`, `public/styles/main.css`, `public/scripts/main.js`에 DB 프로젝트 목록 모달, 선택 프로젝트 상세 조회 API, 스크립트와 이미지/영상 URL 상태 복원, 네트워크 접근 가능 서버 바인딩을 추가했다.
+- 2026-07-21: `Tasks/01-18.md`, `docs/ARCHITECTURE.md`, `docs/PENDING_ISSUES.md`를 실제 구현 기준으로 갱신했고 `node --check server.js`, `node --check database.js`, `node --check public/scripts/main.js` 정적 점검을 완료했다.
+- 2026-07-21: `01-18`을 `진행중`으로 전환하고, DB 프로젝트 목록 기반 불러오기 흐름 구현을 시작했다.
+- 2026-07-21: 이미지 파일은 저장됐지만 화면에 이전 base64 응답 오류 문구가 표시되는 문제를 확인하고, `public/index.html`의 `main.js` 로드 URL에 버전을 붙였으며 `server.js`의 HTML/CSS/JS 응답에 `Cache-Control: no-cache`를 추가했다.
+- 2026-07-21: `Tasks/MAKE_REQUEST.md` 요청을 검토해 DB 기반 프로젝트 목록 선택 흐름이 `01-17` 다음 단계로 적합하고 범위가 과도하지 않다고 판단했으며, `01-18` 작업리스트와 task 문서를 추가했다.
+- 2026-07-21: `Tasks/01-17.md`, `docs/ARCHITECTURE.md`, `docs/PENDING_ISSUES.md`를 실제 구현 기준으로 갱신했고 `node --check database.js`, `node --check server.js`, `node --check public/scripts/main.js`, DB 결과 메타데이터 저장/조회 직접 호출 점검을 완료했다.
+- 2026-07-21: `01-17`을 `진행중`으로 전환하고 `database.js`, `server.js`, `public/scripts/main.js`에 이미지/영상 결과 메타데이터 DB 저장, 결과 목록 API, DB URL 기반 카드 표시와 프로젝트 불러오기 병합 흐름을 추가했다.
+- 2026-07-21: `01-16`을 `진행중`으로 전환하고 `database.js`, `data/.gitkeep`, `server.js`에 SQLite DB 자동 초기화, 프로젝트 기본 정보 저장, DB 프로젝트 목록 API를 추가했다.
+- 2026-07-21: `Tasks/01-16.md`, `docs/ARCHITECTURE.md`, `docs/PENDING_ISSUES.md`를 실제 구현 기준으로 갱신했고 `node --check server.js`, `node --check database.js`, DB 모듈 직접 호출 점검을 완료했다.
 - 2026-07-06: `01-15`에 프로젝트 `videos/` 저장과 `project.json` 기반 영상 상태 복원 범위를 추가하고 `server.js`, `public/scripts/main.js`에 영상 파일 저장 및 프로젝트 불러오기 복원을 연결했다.
 - 2026-07-06: `Tasks/01-15.md`, `docs/ARCHITECTURE.md`를 실제 구현 기준으로 갱신했고 `node --check server.js`, `node --check public/scripts/main.js` 정적 점검을 완료했다.
 - 2026-07-06: `01-15`를 `진행중`으로 전환하고 `server.js`, `public/index.html`, `public/styles/main.css`, `public/scripts/main.js`에 EvoLink.AI Kling 기반 영상 생성 요청, 이미지 업로드, 장면별 로딩/완료 영상 렌더링을 추가했다.

@@ -1,0 +1,31 @@
+{
+  "projectTopic": "2002년 대한민국 과거 여행",
+  "projectFolderName": "2002년-대한민국-과거-여행",
+  "tone": "신나는",
+  "style": "브이로그",
+  "sceneCount": 3,
+  "savedAt": "2026-07-07T12:55:36.238Z",
+  "scenes": [
+    {
+      "summary": "브이로그 주인공이 타임머신처럼 번쩍이는 지하철 출입구를 지나 2002년 서울 거리로 도착한다.",
+      "narration": "여러분, 저 지금 2002년 서울에 도착했어요! 분위기 미쳤다!",
+      "durationSeconds": 4,
+      "imagePrompt": "Exciting vlog-style scene of a young Korean traveler stepping out of a glowing subway entrance into Seoul in 2002, retro street signs, early 2000s fashion, bright summer daylight, handheld camera feel, energetic atmosphere, realistic cinematic look",
+      "videoPrompt": "Handheld vlog camera follows a young Korean traveler exiting a glowing subway entrance and reacting with excitement, revealing a lively 2002 Seoul street with retro cars, banners, and pedestrians in early 2000s outfits, quick energetic movement, natural daylight"
+    },
+    {
+      "summary": "거리 응원 인파 속에서 빨간 티셔츠를 입은 사람들이 태극기를 흔들며 월드컵 열기를 즐긴다.",
+      "narration": "와, 온 거리가 빨간 물결이에요. 2002 월드컵 응원 현장입니다!",
+      "durationSeconds": 5,
+      "imagePrompt": "Crowded Seoul street during the 2002 Korea World Cup celebration, people wearing red shirts, waving South Korean flags, joyful faces, confetti, outdoor screens, energetic vlog snapshot, realistic documentary style",
+      "videoPrompt": "Vlog camera moves through a cheering crowd in red shirts, people wave South Korean flags and jump with excitement, confetti in the air, outdoor screen glow, fast cuts and lively handheld motion, festive 2002 World Cup atmosphere"
+    },
+    {
+      "summary": "주인공이 2002년 감성의 PC방과 거리 간식을 즐기며 과거 여행을 마무리한다.",
+      "narration": "마지막은 PC방이랑 길거리 간식! 2002년 감성, 제대로 즐겼습니다!",
+      "durationSeconds": 5,
+      "imagePrompt": "Early 2000s Korean PC bang interior with CRT monitors, colorful snack corner, then a street food stall with tteokbokki and hotteok, young vlogger smiling, nostalgic warm lighting, exciting travel vlog style, realistic",
+      "videoPrompt": "Quick vlog montage: close-up of CRT monitors in a 2002 Korean PC bang, the traveler laughs while holding a snack, cut to a street food stall serving tteokbokki, warm neon lights, handheld camera, upbeat ending"
+    }
+  ]
+}

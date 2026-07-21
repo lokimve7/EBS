@@ -2,9 +2,22 @@ const http = require("http");
 const fs = require("fs");
 const https = require("https");
 const path = require("path");
+const crypto = require("crypto");
+const {
+  databaseFilePath,
+  getProjectById,
+  getProjectByFolderName,
+  initializeDatabase,
+  listSceneResultsByProject,
+  listProjects,
+  touchProjectUpdatedAt,
+  upsertSceneResult,
+  upsertProjectBasicInfo,
+} = require("./database");
 
 const PORT = 3001;
-const HOST = "localhost";
+const HOST = "0.0.0.0";
+const publicHost = "localhost";
 const publicDirectory = path.join(__dirname, "public");
 const indexFilePath = path.join(publicDirectory, "index.html");
 const projectsDirectory = path.join(__dirname, "projects");
@@ -27,6 +40,7 @@ const contentTypes = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
 };
+const rangeRequestFileExtensions = [".mp4", ".webm"];
 const supportedDurations = [3, 4, 5];
 const projectAssetFolderNames = ["scripts", "images", "videos", "voices"];
 const imageOutputFormat = "png";
@@ -62,17 +76,87 @@ function serveWelcomePage(response) {
       return;
     }
 
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-cache",
+    });
     response.end(fileContent);
   });
 }
 
 /**
+ * 영상 파일의 Range 요청에 맞춰 일부 구간만 응답한다.
+ */
+function serveRangeFile(filePath, request, response, contentType, fileSize) {
+  const rangeHeader = request.headers.range || "";
+  const rangeMatch = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+
+  if (!rangeMatch) {
+    response.writeHead(416, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Range": `bytes */${fileSize}`,
+    });
+    response.end("요청한 영상 구간이 올바르지 않습니다.");
+    return;
+  }
+
+  const requestedStart = rangeMatch[1] ? Number.parseInt(rangeMatch[1], 10) : 0;
+  const requestedEnd = rangeMatch[2] ? Number.parseInt(rangeMatch[2], 10) : fileSize - 1;
+  const start = Number.isNaN(requestedStart) ? 0 : requestedStart;
+  const end = Number.isNaN(requestedEnd) ? fileSize - 1 : Math.min(requestedEnd, fileSize - 1);
+
+  if (start >= fileSize || end >= fileSize || start > end) {
+    response.writeHead(416, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Range": `bytes */${fileSize}`,
+    });
+    response.end("요청한 영상 구간을 찾을 수 없습니다.");
+    return;
+  }
+
+  response.writeHead(206, {
+    "Content-Type": contentType,
+    "Accept-Ranges": "bytes",
+    "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+    "Content-Length": end - start + 1,
+  });
+  fs.createReadStream(filePath, { start, end }).pipe(response);
+}
+
+/**
  * 정적 파일 경로를 읽어 응답한다.
  */
-function serveStaticFile(filePath, response) {
+function serveStaticFile(filePath, request, response) {
   const fileExtension = path.extname(filePath).toLowerCase();
   const contentType = contentTypes[fileExtension] || "application/octet-stream";
+  const responseHeaders = { "Content-Type": contentType };
+
+  if ([".css", ".html", ".js"].includes(fileExtension)) {
+    responseHeaders["Cache-Control"] = "no-cache";
+  }
+
+  if (rangeRequestFileExtensions.includes(fileExtension)) {
+    fs.stat(filePath, (error, fileStats) => {
+      if (error || !fileStats.isFile()) {
+        response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        response.end("페이지를 찾을 수 없습니다.");
+        return;
+      }
+
+      if (request.headers.range) {
+        serveRangeFile(filePath, request, response, contentType, fileStats.size);
+        return;
+      }
+
+      response.writeHead(200, {
+        ...responseHeaders,
+        "Accept-Ranges": "bytes",
+        "Content-Length": fileStats.size,
+      });
+      fs.createReadStream(filePath).pipe(response);
+    });
+    return;
+  }
 
   fs.readFile(filePath, (error, fileContent) => {
     if (error) {
@@ -81,7 +165,7 @@ function serveStaticFile(filePath, response) {
       return;
     }
 
-    response.writeHead(200, { "Content-Type": contentType });
+    response.writeHead(200, responseHeaders);
     response.end(fileContent);
   });
 }
@@ -92,6 +176,31 @@ function serveStaticFile(filePath, response) {
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(payload));
+}
+
+/**
+ * 프로젝트 폴더 안의 저장 파일 경로인지 확인한 뒤 JSON을 읽는다.
+ */
+async function readProjectJsonFile(projectFolderName, filePath, fallbackRelativePath) {
+  const storagePaths = createProjectStoragePaths(projectFolderName, projectFolderName);
+  const fallbackFilePath = fallbackRelativePath
+    ? path.join(storagePaths.projectDirectory, fallbackRelativePath)
+    : "";
+  const normalizedFilePath = typeof filePath === "string" ? filePath.trim() : "";
+  const targetFilePath = normalizedFilePath
+    ? path.resolve(path.isAbsolute(normalizedFilePath) ? normalizedFilePath : path.join(__dirname, normalizedFilePath))
+    : path.resolve(fallbackFilePath);
+  const projectDirectoryPath = path.resolve(storagePaths.projectDirectory);
+  const projectDirectoryPrefix = projectDirectoryPath.endsWith(path.sep)
+    ? projectDirectoryPath
+    : `${projectDirectoryPath}${path.sep}`;
+
+  if (targetFilePath !== projectDirectoryPath && !targetFilePath.startsWith(projectDirectoryPrefix)) {
+    throw new Error("프로젝트 저장 파일 경로가 올바르지 않습니다.");
+  }
+
+  const rawFileText = await fs.promises.readFile(targetFilePath, "utf8");
+  return JSON.parse(rawFileText);
 }
 
 /**
@@ -163,6 +272,7 @@ function validateImageRequestPayload(requestBody) {
   const imagePrompt = typeof requestBody.imagePrompt === "string" ? requestBody.imagePrompt.trim() : "";
   const openaiApiKey = typeof requestBody.openaiApiKey === "string" ? requestBody.openaiApiKey.trim() : "";
   const projectFolderName = typeof requestBody.projectFolderName === "string" ? requestBody.projectFolderName.trim() : "";
+  const projectId = typeof requestBody.projectId === "string" ? requestBody.projectId.trim() : "";
   const sceneIndex = Number.parseInt(String(requestBody.sceneIndex), 10);
 
   if (!topic) {
@@ -185,6 +295,7 @@ function validateImageRequestPayload(requestBody) {
     topic,
     imagePrompt,
     openaiApiKey,
+    projectId,
     projectFolderName,
     sceneIndex,
   };
@@ -198,6 +309,7 @@ function validateVideoRequestPayload(requestBody) {
   const videoPrompt = typeof requestBody.videoPrompt === "string" ? requestBody.videoPrompt.trim() : "";
   const klingApiKey = typeof requestBody.klingApiKey === "string" ? requestBody.klingApiKey.trim() : "";
   const projectFolderName = typeof requestBody.projectFolderName === "string" ? requestBody.projectFolderName.trim() : "";
+  const projectId = typeof requestBody.projectId === "string" ? requestBody.projectId.trim() : "";
   const sourceImagePath = typeof requestBody.sourceImagePath === "string" ? requestBody.sourceImagePath.trim() : "";
   const sceneIndex = Number.parseInt(String(requestBody.sceneIndex), 10);
 
@@ -213,8 +325,8 @@ function validateVideoRequestPayload(requestBody) {
     throw new Error("EvoLink.AI API 키가 필요합니다.");
   }
 
-  if (!projectFolderName) {
-    throw new Error("프로젝트 폴더 정보를 확인할 수 없습니다.");
+  if (!projectFolderName && !projectId) {
+    throw new Error("프로젝트 정보를 확인할 수 없습니다.");
   }
 
   if (!sourceImagePath) {
@@ -229,6 +341,7 @@ function validateVideoRequestPayload(requestBody) {
     topic,
     videoPrompt,
     klingApiKey,
+    projectId,
     projectFolderName,
     sourceImagePath,
     sceneIndex,
@@ -251,18 +364,54 @@ function sanitizeProjectFolderName(topic) {
 }
 
 /**
+ * 새 프로젝트와 결과 파일명에 사용할 짧은 고유 ID를 만든다.
+ */
+function createProjectId() {
+  return `project-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+}
+
+/**
+ * 파일명에 안전하게 포함할 수 있도록 프로젝트 ID를 정리한다.
+ */
+function sanitizeProjectId(projectId) {
+  const rawProjectId = String(projectId || "").trim();
+  if (!rawProjectId) {
+    return "";
+  }
+
+  const sanitizedProjectId = rawProjectId
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+
+  if (sanitizedProjectId) {
+    return sanitizedProjectId;
+  }
+
+  return `project-${crypto.createHash("sha1").update(rawProjectId).digest("hex").slice(0, 12)}`;
+}
+
+/**
  * 프로젝트 저장에 필요한 기본 폴더 구조 경로를 계산한다.
  */
-function createProjectStoragePaths(topic, projectFolderNameOverride) {
+function createProjectStoragePaths(topic, projectFolderNameOverride, projectIdOverride) {
+  const normalizedProjectId = typeof projectIdOverride === "string" ? projectIdOverride.trim() : "";
+  const projectId = normalizedProjectId || (
+    typeof projectFolderNameOverride === "string" && projectFolderNameOverride.trim()
+      ? projectFolderNameOverride.trim()
+      : createProjectId()
+  );
   const projectFolderName = typeof projectFolderNameOverride === "string" && projectFolderNameOverride.trim()
     ? projectFolderNameOverride.trim()
-    : sanitizeProjectFolderName(topic);
+    : `${sanitizeProjectId(projectId)}-${sanitizeProjectFolderName(topic)}`;
   const projectDirectory = path.join(projectsDirectory, projectFolderName);
   const scriptsDirectory = path.join(projectDirectory, "scripts");
   const imagesDirectory = path.join(projectDirectory, "images");
   const videosDirectory = path.join(projectDirectory, "videos");
 
   return {
+    projectId,
     projectFolderName,
     projectDirectory,
     scriptsDirectory,
@@ -276,8 +425,8 @@ function createProjectStoragePaths(topic, projectFolderNameOverride) {
 /**
  * 프로젝트별 결과 저장 폴더와 하위 자산 폴더를 보장한다.
  */
-async function ensureProjectDirectories(topic, projectFolderNameOverride) {
-  const storagePaths = createProjectStoragePaths(topic, projectFolderNameOverride);
+async function ensureProjectDirectories(topic, projectFolderNameOverride, projectIdOverride) {
+  const storagePaths = createProjectStoragePaths(topic, projectFolderNameOverride, projectIdOverride);
   const directoriesToCreate = [
     projectsDirectory,
     storagePaths.projectDirectory,
@@ -310,6 +459,7 @@ function normalizeScriptSceneItem(sceneItem) {
 function createProjectStatePayload(projectMeta, imageItems, videoItems) {
   return {
     projectTopic: projectMeta.topic,
+    projectId: projectMeta.projectId,
     projectFolderName: projectMeta.projectFolderName,
     tone: projectMeta.tone,
     style: projectMeta.style,
@@ -344,9 +494,10 @@ async function saveProjectStateToProject(projectMeta, imageItems, videoItems) {
  * 생성된 장면 스크립트를 프로젝트 폴더 안의 JSON 파일로 저장한다.
  */
 async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
-  const storagePaths = await ensureProjectDirectories(scriptRequest.topic, scriptRequest.projectFolderName);
+  const storagePaths = await ensureProjectDirectories(scriptRequest.topic, scriptRequest.projectFolderName, scriptRequest.projectId);
   const scriptFilePayload = {
     projectTopic: scriptRequest.topic,
+    projectId: storagePaths.projectId,
     projectFolderName: storagePaths.projectFolderName,
     tone: scriptRequest.tone,
     style: scriptRequest.style,
@@ -364,6 +515,7 @@ async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
   await saveProjectStateToProject(
     {
       topic: scriptRequest.topic,
+      projectId: storagePaths.projectId,
       projectFolderName: storagePaths.projectFolderName,
       tone: scriptRequest.tone,
       style: scriptRequest.style,
@@ -373,6 +525,17 @@ async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
     [],
     []
   );
+  upsertProjectBasicInfo({
+    projectId: storagePaths.projectId,
+    folderName: storagePaths.projectFolderName,
+    name: scriptRequest.topic,
+    topic: scriptRequest.topic,
+    tone: scriptRequest.tone,
+    style: scriptRequest.style,
+    sceneCount: sceneItems.length,
+    projectFilePath: storagePaths.projectFilePath,
+    scriptFilePath: storagePaths.scriptFilePath,
+  });
 
   return storagePaths;
 }
@@ -381,10 +544,10 @@ async function saveSceneScriptsToProject(scriptRequest, sceneItems) {
  * 생성된 장면 이미지를 프로젝트 폴더 안의 파일로 저장한다.
  */
 async function saveSceneImageToProject(imageRequest, imageBase64, outputFormat) {
-  const storagePaths = await ensureProjectDirectories(imageRequest.topic, imageRequest.projectFolderName);
+  const storagePaths = await ensureProjectDirectories(imageRequest.topic, imageRequest.projectFolderName, imageRequest.projectId);
   const normalizedFormat = outputFormat === "jpeg" ? "jpeg" : "png";
   const sceneNumber = String(imageRequest.sceneIndex + 1).padStart(2, "0");
-  const imageFileName = `scene-${sceneNumber}.${normalizedFormat}`;
+  const imageFileName = `${sanitizeProjectId(storagePaths.projectId)}-image-scene-${sceneNumber}.${normalizedFormat}`;
   const imageFilePath = path.join(storagePaths.imagesDirectory, imageFileName);
   const imageWebPath = `/projects/${encodeURIComponent(storagePaths.projectFolderName)}/images/${encodeURIComponent(imageFileName)}`;
   const imageBytes = Buffer.from(imageBase64, "base64");
@@ -429,9 +592,9 @@ function downloadVideoFile(videoUrl) {
  * 생성된 장면 영상을 프로젝트 폴더 안의 파일로 저장한다.
  */
 async function saveSceneVideoToProject(videoRequest, videoUrl) {
-  const storagePaths = await ensureProjectDirectories(videoRequest.topic, videoRequest.projectFolderName);
+  const storagePaths = await ensureProjectDirectories(videoRequest.topic, videoRequest.projectFolderName, videoRequest.projectId);
   const sceneNumber = String(videoRequest.sceneIndex + 1).padStart(2, "0");
-  const videoFileName = `scene-${sceneNumber}.mp4`;
+  const videoFileName = `${sanitizeProjectId(storagePaths.projectId)}-video-scene-${sceneNumber}.mp4`;
   const videoFilePath = path.join(storagePaths.videosDirectory, videoFileName);
   const videoWebPath = `/projects/${encodeURIComponent(storagePaths.projectFolderName)}/videos/${encodeURIComponent(videoFileName)}`;
   const videoBytes = await downloadVideoFile(videoUrl);
@@ -450,7 +613,7 @@ async function saveSceneVideoToProject(videoRequest, videoUrl) {
  * 프로젝트 대표 JSON에 생성된 이미지 상태를 반영한다.
  */
 async function updateProjectSceneImageState(imageRequest, savedImageResult) {
-  const storagePaths = createProjectStoragePaths(imageRequest.topic, imageRequest.projectFolderName);
+  const storagePaths = createProjectStoragePaths(imageRequest.topic, imageRequest.projectFolderName, imageRequest.projectId);
   let projectPayload = null;
 
   try {
@@ -463,6 +626,7 @@ async function updateProjectSceneImageState(imageRequest, savedImageResult) {
     projectPayload = createProjectStatePayload(
       {
         topic: typeof scriptPayload.projectTopic === "string" ? scriptPayload.projectTopic : imageRequest.topic,
+        projectId: typeof scriptPayload.projectId === "string" ? scriptPayload.projectId : storagePaths.projectId,
         projectFolderName: storagePaths.projectFolderName,
         tone: typeof scriptPayload.tone === "string" ? scriptPayload.tone : "",
         style: typeof scriptPayload.style === "string" ? scriptPayload.style : "",
@@ -485,6 +649,7 @@ async function updateProjectSceneImageState(imageRequest, savedImageResult) {
   const nextProjectPayload = {
     ...projectPayload,
     projectTopic: typeof projectPayload.projectTopic === "string" ? projectPayload.projectTopic : imageRequest.topic,
+    projectId: typeof projectPayload.projectId === "string" ? projectPayload.projectId : storagePaths.projectId,
     projectFolderName: storagePaths.projectFolderName,
     scriptFilePath: "scripts/scene-script.json",
     savedAt: new Date().toISOString(),
@@ -502,7 +667,7 @@ async function updateProjectSceneImageState(imageRequest, savedImageResult) {
  * 프로젝트 대표 JSON에 생성된 영상 상태를 반영한다.
  */
 async function updateProjectSceneVideoState(videoRequest, savedVideoResult) {
-  const storagePaths = createProjectStoragePaths(videoRequest.topic, videoRequest.projectFolderName);
+  const storagePaths = createProjectStoragePaths(videoRequest.topic, videoRequest.projectFolderName, videoRequest.projectId);
   let projectPayload = null;
 
   try {
@@ -515,6 +680,7 @@ async function updateProjectSceneVideoState(videoRequest, savedVideoResult) {
     projectPayload = createProjectStatePayload(
       {
         topic: typeof scriptPayload.projectTopic === "string" ? scriptPayload.projectTopic : videoRequest.topic,
+        projectId: typeof scriptPayload.projectId === "string" ? scriptPayload.projectId : storagePaths.projectId,
         projectFolderName: storagePaths.projectFolderName,
         tone: typeof scriptPayload.tone === "string" ? scriptPayload.tone : "",
         style: typeof scriptPayload.style === "string" ? scriptPayload.style : "",
@@ -537,6 +703,7 @@ async function updateProjectSceneVideoState(videoRequest, savedVideoResult) {
   const nextProjectPayload = {
     ...projectPayload,
     projectTopic: typeof projectPayload.projectTopic === "string" ? projectPayload.projectTopic : videoRequest.topic,
+    projectId: typeof projectPayload.projectId === "string" ? projectPayload.projectId : storagePaths.projectId,
     projectFolderName: storagePaths.projectFolderName,
     scriptFilePath: "scripts/scene-script.json",
     savedAt: new Date().toISOString(),
@@ -551,6 +718,26 @@ async function updateProjectSceneVideoState(videoRequest, savedVideoResult) {
 }
 
 /**
+ * 장면 생성 결과 메타데이터를 DB에 저장한다.
+ */
+function saveSceneResultMetadata(sceneRequest, resultType, resultState) {
+  const storagePaths = createProjectStoragePaths(sceneRequest.topic, sceneRequest.projectFolderName, sceneRequest.projectId);
+  const prompt = resultType === "image" ? sceneRequest.imagePrompt : sceneRequest.videoPrompt;
+
+  upsertSceneResult({
+    projectId: storagePaths.projectId,
+    projectFolderName: storagePaths.projectFolderName,
+    sceneIndex: sceneRequest.sceneIndex,
+    resultType,
+    url: typeof resultState.url === "string" ? resultState.url : "",
+    status: typeof resultState.status === "string" ? resultState.status : "idle",
+    errorMessage: typeof resultState.errorMessage === "string" ? resultState.errorMessage : "",
+    prompt: typeof prompt === "string" ? prompt : "",
+  });
+  touchProjectUpdatedAt(storagePaths.projectFolderName, storagePaths.projectId);
+}
+
+/**
  * 파일 경로 확장자를 기준으로 MIME 타입을 계산한다.
  */
 function getMimeTypeFromFilePath(filePath) {
@@ -561,7 +748,7 @@ function getMimeTypeFromFilePath(filePath) {
  * 프로젝트 안의 상대 이미지 경로를 실제 파일 경로로 변환한다.
  */
 function resolveProjectImageFilePath(videoRequest) {
-  const storagePaths = createProjectStoragePaths(videoRequest.topic, videoRequest.projectFolderName);
+  const storagePaths = createProjectStoragePaths(videoRequest.topic, videoRequest.projectFolderName, videoRequest.projectId);
   const candidatePath = path.isAbsolute(videoRequest.sourceImagePath)
     ? videoRequest.sourceImagePath
     : path.join(storagePaths.projectDirectory, videoRequest.sourceImagePath.replaceAll("/", path.sep));
@@ -584,7 +771,7 @@ function uploadImageFileToEvoLink(videoRequest, requestId) {
       const imageBytes = await fs.promises.readFile(imageFilePath);
       const requestPayload = JSON.stringify({
         base64_data: `data:${getMimeTypeFromFilePath(imageFilePath)};base64,${imageBytes.toString("base64")}`,
-        upload_path: `projects/${videoRequest.projectFolderName}/videos/source-images`,
+        upload_path: `projects/${videoRequest.projectId || videoRequest.projectFolderName}/videos/source-images`,
         file_name: path.basename(imageFilePath),
       });
 
@@ -1114,6 +1301,7 @@ async function handleGenerateScriptRequest(request, response) {
     const projectStorage = await saveSceneScriptsToProject(validatedPayload, sceneItems);
 
     logServerEvent(`[스크립트 생성 ${requestId}] 프로젝트 저장 완료`, {
+      projectId: projectStorage.projectId,
       projectFolderName: projectStorage.projectFolderName,
       scriptFilePath: projectStorage.scriptFilePath,
     });
@@ -1124,6 +1312,7 @@ async function handleGenerateScriptRequest(request, response) {
     sendJson(response, 200, {
       scenes: sceneItems,
       project: {
+        projectId: projectStorage.projectId,
         folderName: projectStorage.projectFolderName,
         projectFilePath: projectStorage.projectFilePath,
         scriptFilePath: projectStorage.scriptFilePath,
@@ -1144,13 +1333,16 @@ async function handleGenerateScriptRequest(request, response) {
  */
 async function handleGenerateImageRequest(request, response) {
   const requestId = String(++imageRequestSequence).padStart(3, "0");
+  let validatedPayload = null;
 
   try {
     logServerEvent(`[이미지 생성 ${requestId}] 요청 수신`);
     const requestBody = await readJsonBody(request);
-    const validatedPayload = validateImageRequestPayload(requestBody);
+    validatedPayload = validateImageRequestPayload(requestBody);
     logServerEvent(`[이미지 생성 ${requestId}] 요청 검증 완료`, {
       topic: validatedPayload.topic,
+      projectId: validatedPayload.projectId,
+      projectFolderName: validatedPayload.projectFolderName,
       sceneIndex: validatedPayload.sceneIndex,
       hasOpenAiApiKey: Boolean(validatedPayload.openaiApiKey),
     });
@@ -1162,10 +1354,17 @@ async function handleGenerateImageRequest(request, response) {
       generatedImage.outputFormat
     );
     await updateProjectSceneImageState(validatedPayload, projectStorage);
+    saveSceneResultMetadata(validatedPayload, "image", {
+      url: projectStorage.imageWebPath,
+      status: "success",
+      errorMessage: "",
+    });
 
     logServerEvent(`[이미지 생성 ${requestId}] 프로젝트 저장 완료`, {
+      projectId: projectStorage.projectId,
       projectFolderName: projectStorage.projectFolderName,
       imageFilePath: projectStorage.imageFilePath,
+      imageWebPath: projectStorage.imageWebPath,
     });
     logServerEvent(`[이미지 생성 ${requestId}] 응답 반환 완료`, {
       sceneIndex: validatedPayload.sceneIndex,
@@ -1173,13 +1372,15 @@ async function handleGenerateImageRequest(request, response) {
 
     sendJson(response, 200, {
       image: {
-        base64: generatedImage.base64,
         outputFormat: generatedImage.outputFormat,
         revisedPrompt: generatedImage.revisedPrompt,
         filePath: projectStorage.imageFilePath,
         webPath: projectStorage.imageWebPath,
+        dbUrl: projectStorage.imageWebPath,
+        status: "success",
       },
       project: {
+        projectId: projectStorage.projectId,
         folderName: projectStorage.projectFolderName,
         projectFilePath: projectStorage.projectFilePath,
         scriptFilePath: projectStorage.scriptFilePath,
@@ -1187,9 +1388,29 @@ async function handleGenerateImageRequest(request, response) {
     });
   } catch (error) {
     logServerEvent(`[이미지 생성 ${requestId}] 요청 처리 실패`, {
+      projectId: validatedPayload?.projectId,
+      projectFolderName: validatedPayload?.projectFolderName,
+      sceneIndex: validatedPayload?.sceneIndex,
       message: error instanceof Error ? error.message : "이미지 생성 요청에 실패했습니다.",
     });
+
+    try {
+      if (validatedPayload) {
+        saveSceneResultMetadata(validatedPayload, "image", {
+          status: "error",
+          errorMessage: error instanceof Error ? error.message : "이미지 생성 요청에 실패했습니다.",
+        });
+      }
+    } catch (dbError) {
+      logServerEvent(`[이미지 생성 ${requestId}] DB 실패 상태 저장 실패`, {
+        message: dbError instanceof Error ? dbError.message : "DB 실패 상태 저장에 실패했습니다.",
+      });
+    }
+
     sendJson(response, 400, {
+      projectId: validatedPayload?.projectId || "",
+      projectFolderName: validatedPayload?.projectFolderName || "",
+      sceneIndex: Number.isInteger(validatedPayload?.sceneIndex) ? validatedPayload.sceneIndex : null,
       error: error instanceof Error ? error.message : "이미지 생성 요청에 실패했습니다.",
     });
   }
@@ -1200,13 +1421,16 @@ async function handleGenerateImageRequest(request, response) {
  */
 async function handleGenerateVideoRequest(request, response) {
   const requestId = String(++videoRequestSequence).padStart(3, "0");
+  let validatedPayload = null;
 
   try {
     logServerEvent(`[영상 생성 ${requestId}] 요청 수신`);
     const requestBody = await readJsonBody(request);
-    const validatedPayload = validateVideoRequestPayload(requestBody);
+    validatedPayload = validateVideoRequestPayload(requestBody);
     logServerEvent(`[영상 생성 ${requestId}] 요청 검증 완료`, {
       topic: validatedPayload.topic,
+      projectId: validatedPayload.projectId,
+      projectFolderName: validatedPayload.projectFolderName,
       sceneIndex: validatedPayload.sceneIndex,
       hasKlingApiKey: Boolean(validatedPayload.klingApiKey),
     });
@@ -1216,25 +1440,147 @@ async function handleGenerateVideoRequest(request, response) {
     const completedTask = await waitForEvoLinkVideoResult(createdTask.id, validatedPayload.klingApiKey, requestId);
     const savedVideoResult = await saveSceneVideoToProject(validatedPayload, completedTask.videoUrl);
     await updateProjectSceneVideoState(validatedPayload, savedVideoResult);
+    saveSceneResultMetadata(validatedPayload, "video", {
+      url: savedVideoResult.videoWebPath,
+      status: "success",
+      errorMessage: "",
+    });
 
     logServerEvent(`[영상 생성 ${requestId}] 응답 반환 완료`, {
+      projectId: savedVideoResult.projectId,
+      projectFolderName: savedVideoResult.projectFolderName,
       sceneIndex: validatedPayload.sceneIndex,
       taskId: completedTask.taskId,
+      videoWebPath: savedVideoResult.videoWebPath,
     });
     sendJson(response, 200, {
       video: {
         taskId: completedTask.taskId,
         filePath: savedVideoResult.videoFilePath,
         webPath: savedVideoResult.videoWebPath,
+        dbUrl: savedVideoResult.videoWebPath,
+        status: "success",
         sourceImageUrl: uploadedImageUrl,
+      },
+      project: {
+        projectId: savedVideoResult.projectId,
+        folderName: savedVideoResult.projectFolderName,
+        projectFilePath: savedVideoResult.projectFilePath,
+        scriptFilePath: savedVideoResult.scriptFilePath,
       },
     });
   } catch (error) {
     logServerEvent(`[영상 생성 ${requestId}] 요청 처리 실패`, {
+      projectId: validatedPayload?.projectId,
+      projectFolderName: validatedPayload?.projectFolderName,
+      sceneIndex: validatedPayload?.sceneIndex,
       message: error instanceof Error ? error.message : "영상 생성 요청에 실패했습니다.",
     });
+
+    try {
+      if (validatedPayload) {
+        saveSceneResultMetadata(validatedPayload, "video", {
+          status: "error",
+          errorMessage: error instanceof Error ? error.message : "영상 생성 요청에 실패했습니다.",
+        });
+      }
+    } catch (dbError) {
+      logServerEvent(`[영상 생성 ${requestId}] DB 실패 상태 저장 실패`, {
+        message: dbError instanceof Error ? dbError.message : "DB 실패 상태 저장에 실패했습니다.",
+      });
+    }
+
     sendJson(response, 400, {
+      projectId: validatedPayload?.projectId || "",
+      projectFolderName: validatedPayload?.projectFolderName || "",
+      sceneIndex: Number.isInteger(validatedPayload?.sceneIndex) ? validatedPayload.sceneIndex : null,
       error: error instanceof Error ? error.message : "영상 생성 요청에 실패했습니다.",
+    });
+  }
+}
+
+/**
+ * DB에 저장된 프로젝트 기본 정보 목록 요청을 처리한다.
+ */
+function handleListProjectsRequest(response) {
+  try {
+    sendJson(response, 200, {
+      projects: listProjects(),
+    });
+  } catch (error) {
+    logServerEvent("[프로젝트 목록] DB 조회 실패", {
+      message: error instanceof Error ? error.message : "프로젝트 목록을 불러오지 못했습니다.",
+    });
+    sendJson(response, 500, {
+      error: "프로젝트 목록을 불러오지 못했습니다.",
+    });
+  }
+}
+
+/**
+ * DB 프로젝트 목록에서 선택한 프로젝트의 상태와 장면 데이터를 반환한다.
+ */
+async function handleGetProjectRequest(request, response) {
+  try {
+    const requestUrl = new URL(request.url, `http://${publicHost}:${PORT}`);
+    const projectFolderName = requestUrl.searchParams.get("projectFolderName") || "";
+    const projectId = requestUrl.searchParams.get("projectId") || "";
+    const projectItem = projectId
+      ? getProjectById(projectId)
+      : getProjectByFolderName(projectFolderName);
+
+    if (!projectItem) {
+      sendJson(response, 404, {
+        error: "선택한 프로젝트를 찾지 못했습니다.",
+      });
+      return;
+    }
+
+    const projectState = await readProjectJsonFile(
+      projectItem.folderName,
+      projectItem.projectFilePath,
+      "project.json"
+    );
+    const scriptPayload = await readProjectJsonFile(
+      projectItem.folderName,
+      projectItem.scriptFilePath,
+      "scripts/scene-script.json"
+    );
+
+    sendJson(response, 200, {
+      project: projectItem,
+      projectState,
+      script: scriptPayload,
+      sceneResults: listSceneResultsByProject(projectItem.folderName, projectItem.projectId),
+    });
+  } catch (error) {
+    logServerEvent("[프로젝트 불러오기] 프로젝트 조회 실패", {
+      message: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.",
+    });
+    sendJson(response, 400, {
+      error: error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.",
+    });
+  }
+}
+
+/**
+ * DB에 저장된 프로젝트 이미지/영상 결과 목록 요청을 처리한다.
+ */
+function handleListSceneResultsRequest(request, response) {
+  try {
+    const requestUrl = new URL(request.url, `http://${publicHost}:${PORT}`);
+    const projectFolderName = requestUrl.searchParams.get("projectFolderName") || "";
+    const projectId = requestUrl.searchParams.get("projectId") || "";
+
+    sendJson(response, 200, {
+      results: listSceneResultsByProject(projectFolderName, projectId),
+    });
+  } catch (error) {
+    logServerEvent("[장면 결과 목록] DB 조회 실패", {
+      message: error instanceof Error ? error.message : "장면 결과 목록을 불러오지 못했습니다.",
+    });
+    sendJson(response, 400, {
+      error: error instanceof Error ? error.message : "장면 결과 목록을 불러오지 못했습니다.",
     });
   }
 }
@@ -1244,6 +1590,21 @@ async function handleGenerateVideoRequest(request, response) {
  */
 function handleRequest(request, response) {
   const requestPath = request.url.split("?")[0];
+
+  if (request.method === "GET" && requestPath === "/api/projects") {
+    handleListProjectsRequest(response);
+    return;
+  }
+
+  if (request.method === "GET" && requestPath === "/api/project") {
+    handleGetProjectRequest(request, response);
+    return;
+  }
+
+  if (request.method === "GET" && requestPath === "/api/scene-results") {
+    handleListSceneResultsRequest(request, response);
+    return;
+  }
 
   if (request.method === "POST" && requestPath === "/api/script/generate") {
     handleGenerateScriptRequest(request, response);
@@ -1270,7 +1631,7 @@ function handleRequest(request, response) {
     const projectFilePath = path.join(__dirname, normalizedProjectPath);
 
     if (projectFilePath.startsWith(projectsDirectory)) {
-      serveStaticFile(projectFilePath, response);
+      serveStaticFile(projectFilePath, request, response);
       return;
     }
   }
@@ -1279,7 +1640,7 @@ function handleRequest(request, response) {
   const filePath = path.join(publicDirectory, normalizedRequestPath);
 
   if (filePath.startsWith(publicDirectory)) {
-    serveStaticFile(filePath, response);
+    serveStaticFile(filePath, request, response);
     return;
   }
 
@@ -1288,7 +1649,13 @@ function handleRequest(request, response) {
 }
 
 const server = http.createServer(handleRequest);
+const databaseInfo = initializeDatabase();
 
-server.listen(PORT, () => {
-  console.log(`서버가 실행되었습니다: http://${HOST}:${PORT}`);
+logServerEvent("SQLite DB 준비 완료", {
+  databaseFilePath: databaseInfo.databaseFilePath || databaseFilePath,
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`서버가 실행되었습니다: http://${publicHost}:${PORT}`);
+  console.log(`같은 네트워크의 다른 PC에서는 이 PC의 내부 IP와 포트 ${PORT}로 접속할 수 있습니다.`);
 });

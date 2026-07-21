@@ -1,0 +1,31 @@
+{
+  "projectTopic": "2100년 대한민국 미래여행",
+  "projectFolderName": "2100년-대한민국-미래여행",
+  "tone": "신나는",
+  "style": "광고",
+  "sceneCount": 3,
+  "savedAt": "2026-07-21T11:09:46.140Z",
+  "scenes": [
+    {
+      "summary": "2100년 서울 상공을 가르는 투명한 공중열차와 네온빛 미래 도시 전경",
+      "narration": "2100년 대한민국, 여행의 시작은 하늘 위에서!",
+      "durationSeconds": 4,
+      "imagePrompt": "A vibrant futuristic Seoul in the year 2100, transparent sky train flying between sleek skyscrapers, neon lights, holographic billboards, clean blue sky, exciting travel advertisement style, ultra modern, cinematic, high detail",
+      "videoPrompt": "Camera glides alongside a transparent sky train flying through futuristic Seoul, neon signs and holograms passing by, bright energetic commercial mood, smooth dynamic motion, cinematic travel ad"
+    },
+    {
+      "summary": "부산 해상도시에서 바다 위 스마트 리조트와 수중 관광 캡슐을 즐기는 사람들",
+      "narration": "바다 위 리조트와 수중 투어까지, 하루가 모험이 됩니다!",
+      "durationSeconds": 5,
+      "imagePrompt": "Futuristic Busan ocean city in 2100, floating smart resorts on sparkling sea, underwater sightseeing capsules, happy travelers, solar glass architecture, tropical yet Korean coastal vibe, bright commercial style, high detail",
+      "videoPrompt": "Aerial camera moves over a futuristic floating resort city near Busan, travelers enter glowing underwater tour capsules, waves sparkle, upbeat travel commercial energy, smooth cinematic movement"
+    },
+    {
+      "summary": "제주 우주공항에서 가족 여행객이 달빛 셔틀에 탑승하며 대한민국 미래여행을 마무리",
+      "narration": "제주에서 우주로! 미래여행은 지금, 대한민국에서 만나요!",
+      "durationSeconds": 5,
+      "imagePrompt": "Jeju spaceport in the year 2100, futuristic moon shuttle ready for boarding, happy family travelers with smart luggage, Hallasan silhouette in background, colorful sunset, exciting Korean travel advertisement, cinematic, ultra detailed",
+      "videoPrompt": "Camera follows happy travelers walking toward a sleek moon shuttle at Jeju spaceport, shuttle lights turn on, sunset sky glows, energetic finale for a futuristic Korea travel commercial"
+    }
+  ]
+}

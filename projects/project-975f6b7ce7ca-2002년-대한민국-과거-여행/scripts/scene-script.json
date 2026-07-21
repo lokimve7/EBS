@@ -1,0 +1,32 @@
+{
+  "projectTopic": "2002년 대한민국 과거 여행",
+  "projectId": "project-975f6b7ce7ca",
+  "projectFolderName": "project-975f6b7ce7ca-2002년-대한민국-과거-여행",
+  "tone": "감동적",
+  "style": "다큐",
+  "sceneCount": 3,
+  "savedAt": "2026-07-21T12:12:47.799Z",
+  "scenes": [
+    {
+      "summary": "2002년 여름, 붉은 물결로 가득한 서울 거리로 시간 여행이 시작된다.",
+      "narration": "2002년 여름, 대한민국은 하나의 심장처럼 뛰었습니다.",
+      "durationSeconds": 5,
+      "imagePrompt": "Documentary style image of Seoul city streets in 2002, crowds wearing red shirts, Korean flags waving, warm nostalgic film grain, emotional atmosphere, early 2000s urban Korea, realistic photography",
+      "videoPrompt": "Slow cinematic push-in through a crowded Seoul street in 2002, people in red shirts cheering and waving Korean flags, nostalgic documentary footage look, warm film grain, emotional tone"
+    },
+    {
+      "summary": "가족과 이웃이 작은 TV 앞에 모여 월드컵 경기를 지켜보는 순간.",
+      "narration": "작은 화면 앞에서도, 우리의 응원은 세상보다 컸습니다.",
+      "durationSeconds": 4,
+      "imagePrompt": "A Korean family and neighbors gathered around a small CRT television in 2002, watching a World Cup match, red shirts, snacks on the table, emotional faces, intimate documentary photography, nostalgic indoor lighting",
+      "videoPrompt": "Gentle handheld documentary shot inside a Korean home in 2002, family and neighbors watching a CRT TV, tense and hopeful expressions, soft warm lighting, subtle camera movement"
+    },
+    {
+      "summary": "승리의 함성 뒤, 낯선 사람들이 서로를 안으며 함께 울고 웃는다.",
+      "narration": "그날 우리는 승리보다 더 큰 기억을 함께 만들었습니다.",
+      "durationSeconds": 5,
+      "imagePrompt": "Emotional documentary photo of strangers hugging and crying with joy on a Korean street in 2002, red shirts, Korean flags, night lights, confetti, nostalgic film grain, heartfelt atmosphere",
+      "videoPrompt": "Cinematic slow motion documentary footage of people embracing in a Korean street at night in 2002, joyful tears, flags waving, confetti falling, warm nostalgic color grading, emotional ending"
+    }
+  ]
+}
