@@ -1,0 +1,31 @@
+{
+  "projectTopic": "2100년 대한민국 미래여행",
+  "projectFolderName": "2100년-대한민국-미래여행",
+  "tone": "신나는",
+  "style": "브이로그",
+  "sceneCount": 3,
+  "savedAt": "2026-07-21T12:30:51.079Z",
+  "scenes": [
+    {
+      "summary": "2100년 서울 상공, 투명한 하늘택시를 타고 미래 도시로 진입하는 브이로그 오프닝",
+      "narration": "여러분, 2100년 서울 도착! 하늘길부터 미쳤죠?",
+      "durationSeconds": 4,
+      "imagePrompt": "A futuristic Seoul in the year 2100, bright morning, transparent flying taxi cockpit view, holographic road signs, vertical gardens on skyscrapers, Han River below, energetic travel vlog style, ultra realistic, vibrant colors",
+      "videoPrompt": "First-person vlog shot from inside a transparent flying taxi entering futuristic Seoul in 2100, camera gently shakes like handheld, holographic navigation overlays passing by, skyscrapers with vertical gardens, bright and exciting mood"
+    },
+    {
+      "summary": "AI 한복 스타일링 부스에서 순식간에 미래형 한복으로 갈아입고 거리 축제를 즐기는 장면",
+      "narration": "여긴 AI 한복 부스! 3초 만에 여행룩 완성!",
+      "durationSeconds": 3,
+      "imagePrompt": "A cheerful traveler in a futuristic Korean street festival, wearing a modern AI-designed hanbok with glowing patterns, holographic fitting booth nearby, colorful neon lanterns, people smiling, vlog thumbnail style, dynamic composition",
+      "videoPrompt": "Handheld vlog camera follows a traveler stepping out of an AI hanbok styling booth, outfit glowing with subtle animated patterns, lively futuristic Korean street festival around them, neon lanterns, excited movement"
+    },
+    {
+      "summary": "부산 해상도시에서 드론 불꽃놀이와 바다 위 야시장을 즐기며 여행을 마무리하는 장면",
+      "narration": "마지막은 부산 해상도시! 밤바다 위 축제, 완전 최고!",
+      "durationSeconds": 5,
+      "imagePrompt": "Futuristic Busan floating ocean city at night in 2100, glowing floating night market, drone fireworks in the sky, ocean reflections, happy vlog traveler holding a small camera, exciting atmosphere, cinematic realism",
+      "videoPrompt": "Vlog-style night shot in a futuristic floating city in Busan, camera pans across glowing ocean night market stalls, drone fireworks forming Korean patterns in the sky, reflections on the water, energetic travel finale mood"
+    }
+  ]
+}
