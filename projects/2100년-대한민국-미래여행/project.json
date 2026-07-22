@@ -2,15 +2,20 @@
   "projectTopic": "2100년 대한민국 미래여행",
   "projectFolderName": "2100년-대한민국-미래여행",
   "tone": "신나는",
-  "style": "브이로그",
+  "style": "광고",
   "sceneCount": 3,
-  "savedAt": "2026-07-21T12:32:41.177Z",
+  "savedAt": "2026-07-21T11:15:47.515Z",
   "scriptFilePath": "scripts/scene-script.json",
   "images": [
     {
-      "sceneIndex": 1,
-      "filePath": "images/scene-02.png"
+      "sceneIndex": 2,
+      "filePath": "images/scene-03.png"
     }
   ],
-  "videos": []
+  "videos": [
+    {
+      "sceneIndex": 2,
+      "filePath": "videos/scene-03.mp4"
+    }
+  ]
 }

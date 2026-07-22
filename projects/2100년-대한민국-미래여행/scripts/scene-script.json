@@ -2,30 +2,30 @@
   "projectTopic": "2100년 대한민국 미래여행",
   "projectFolderName": "2100년-대한민국-미래여행",
   "tone": "신나는",
-  "style": "브이로그",
+  "style": "광고",
   "sceneCount": 3,
-  "savedAt": "2026-07-21T12:30:51.079Z",
+  "savedAt": "2026-07-21T11:09:46.140Z",
   "scenes": [
     {
-      "summary": "2100년 서울 상공, 투명한 하늘택시를 타고 미래 도시로 진입하는 브이로그 오프닝",
-      "narration": "여러분, 2100년 서울 도착! 하늘길부터 미쳤죠?",
+      "summary": "2100년 서울 상공을 가르는 투명한 공중열차와 네온빛 미래 도시 전경",
+      "narration": "2100년 대한민국, 여행의 시작은 하늘 위에서!",
       "durationSeconds": 4,
-      "imagePrompt": "A futuristic Seoul in the year 2100, bright morning, transparent flying taxi cockpit view, holographic road signs, vertical gardens on skyscrapers, Han River below, energetic travel vlog style, ultra realistic, vibrant colors",
-      "videoPrompt": "First-person vlog shot from inside a transparent flying taxi entering futuristic Seoul in 2100, camera gently shakes like handheld, holographic navigation overlays passing by, skyscrapers with vertical gardens, bright and exciting mood"
+      "imagePrompt": "A vibrant futuristic Seoul in the year 2100, transparent sky train flying between sleek skyscrapers, neon lights, holographic billboards, clean blue sky, exciting travel advertisement style, ultra modern, cinematic, high detail",
+      "videoPrompt": "Camera glides alongside a transparent sky train flying through futuristic Seoul, neon signs and holograms passing by, bright energetic commercial mood, smooth dynamic motion, cinematic travel ad"
     },
     {
-      "summary": "AI 한복 스타일링 부스에서 순식간에 미래형 한복으로 갈아입고 거리 축제를 즐기는 장면",
-      "narration": "여긴 AI 한복 부스! 3초 만에 여행룩 완성!",
-      "durationSeconds": 3,
-      "imagePrompt": "A cheerful traveler in a futuristic Korean street festival, wearing a modern AI-designed hanbok with glowing patterns, holographic fitting booth nearby, colorful neon lanterns, people smiling, vlog thumbnail style, dynamic composition",
-      "videoPrompt": "Handheld vlog camera follows a traveler stepping out of an AI hanbok styling booth, outfit glowing with subtle animated patterns, lively futuristic Korean street festival around them, neon lanterns, excited movement"
-    },
-    {
-      "summary": "부산 해상도시에서 드론 불꽃놀이와 바다 위 야시장을 즐기며 여행을 마무리하는 장면",
-      "narration": "마지막은 부산 해상도시! 밤바다 위 축제, 완전 최고!",
+      "summary": "부산 해상도시에서 바다 위 스마트 리조트와 수중 관광 캡슐을 즐기는 사람들",
+      "narration": "바다 위 리조트와 수중 투어까지, 하루가 모험이 됩니다!",
       "durationSeconds": 5,
-      "imagePrompt": "Futuristic Busan floating ocean city at night in 2100, glowing floating night market, drone fireworks in the sky, ocean reflections, happy vlog traveler holding a small camera, exciting atmosphere, cinematic realism",
-      "videoPrompt": "Vlog-style night shot in a futuristic floating city in Busan, camera pans across glowing ocean night market stalls, drone fireworks forming Korean patterns in the sky, reflections on the water, energetic travel finale mood"
+      "imagePrompt": "Futuristic Busan ocean city in 2100, floating smart resorts on sparkling sea, underwater sightseeing capsules, happy travelers, solar glass architecture, tropical yet Korean coastal vibe, bright commercial style, high detail",
+      "videoPrompt": "Aerial camera moves over a futuristic floating resort city near Busan, travelers enter glowing underwater tour capsules, waves sparkle, upbeat travel commercial energy, smooth cinematic movement"
+    },
+    {
+      "summary": "제주 우주공항에서 가족 여행객이 달빛 셔틀에 탑승하며 대한민국 미래여행을 마무리",
+      "narration": "제주에서 우주로! 미래여행은 지금, 대한민국에서 만나요!",
+      "durationSeconds": 5,
+      "imagePrompt": "Jeju spaceport in the year 2100, futuristic moon shuttle ready for boarding, happy family travelers with smart luggage, Hallasan silhouette in background, colorful sunset, exciting Korean travel advertisement, cinematic, ultra detailed",
+      "videoPrompt": "Camera follows happy travelers walking toward a sleek moon shuttle at Jeju spaceport, shuttle lights turn on, sunset sky glows, energetic finale for a futuristic Korea travel commercial"
     }
   ]
 }

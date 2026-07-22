@@ -11,7 +11,10 @@ const imageSceneRail = document.querySelector("#image-scene-rail");
 const videoSceneRail = document.querySelector("#video-scene-rail");
 const sceneStatusBanner = document.querySelector("#scene-status-banner");
 const openProjectFileButton = document.querySelector("#open-project-file-button");
-const projectFileInput = document.querySelector("#project-file-input");
+const projectListModal = document.querySelector("#project-list-modal");
+const projectList = document.querySelector("#project-list");
+const projectListStatus = document.querySelector("#project-list-status");
+const closeProjectListModalButtons = document.querySelectorAll("[data-close-project-list-modal]");
 const openApiKeyModalButton = document.querySelector("#open-api-key-modal-button");
 const apiKeyModal = document.querySelector("#api-key-modal");
 const apiKeyForm = document.querySelector("#api-key-form");
@@ -22,6 +25,7 @@ const apiKeyStorageKey = "ebsApiKeySettings";
 let lastFocusedElement = null;
 let latestGeneratedScenes = [];
 let currentProjectInfo = {
+  projectId: "",
   topic: topicInput ? topicInput.value.trim() : "",
   folderName: topicInput ? sanitizeProjectFolderName(topicInput.value) : "",
 };
@@ -105,10 +109,11 @@ function sanitizeProjectFolderName(topicValue) {
 /**
  * 현재 작업 중인 프로젝트 정보를 화면 상태에 맞춰 갱신한다.
  */
-function syncCurrentProjectInfo(topicValue, folderNameValue) {
+function syncCurrentProjectInfo(topicValue, folderNameValue, projectIdValue) {
   const nextTopic = String(topicValue || "").trim();
 
   currentProjectInfo = {
+    projectId: typeof projectIdValue === "string" ? projectIdValue.trim() : "",
     topic: nextTopic,
     folderName: folderNameValue || sanitizeProjectFolderName(nextTopic),
   };
@@ -289,6 +294,140 @@ function normalizeSceneItem(sceneItem) {
 }
 
 /**
+ * 프로젝트 목록 모달의 안내 상태 문구를 갱신한다.
+ */
+function setProjectListStatus(message, statusName) {
+  if (!projectListStatus) {
+    return;
+  }
+
+  projectListStatus.textContent = message;
+  projectListStatus.dataset.status = statusName;
+}
+
+/**
+ * 저장된 날짜 문자열을 사용자가 읽기 쉬운 형식으로 바꾼다.
+ */
+function formatProjectDateTime(dateValue) {
+  const parsedDate = new Date(dateValue);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsedDate);
+}
+
+/**
+ * 서버 DB에 저장된 프로젝트 목록을 조회한다.
+ */
+async function fetchProjectList() {
+  const response = await window.fetch("/api/projects");
+  const responseData = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(responseData.error || "프로젝트 목록을 불러오지 못했습니다.");
+  }
+
+  return Array.isArray(responseData.projects) ? responseData.projects : [];
+}
+
+/**
+ * 프로젝트 목록을 선택 가능한 버튼 목록으로 그린다.
+ */
+function renderProjectList(projectItems) {
+  if (!projectList) {
+    return;
+  }
+
+  if (!Array.isArray(projectItems) || projectItems.length === 0) {
+    projectList.innerHTML = "";
+    setProjectListStatus("저장된 프로젝트가 없습니다.", "empty");
+    return;
+  }
+
+  projectList.innerHTML = projectItems
+    .map((projectItem) => {
+      const folderName = typeof projectItem.folderName === "string" ? projectItem.folderName : "";
+      const projectId = typeof projectItem.projectId === "string" ? projectItem.projectId : "";
+      const projectName = typeof projectItem.name === "string" && projectItem.name.trim()
+        ? projectItem.name.trim()
+        : folderName;
+
+      return `
+        <button
+          type="button"
+          class="project-list-item"
+          data-project-id="${escapeHtml(projectId)}"
+          data-project-folder-name="${escapeHtml(folderName)}"
+        >
+          <span class="project-list-item__name">${escapeHtml(projectName)}</span>
+          <span class="project-list-item__dates">
+            <span>생성일 ${escapeHtml(formatProjectDateTime(projectItem.createdAt))}</span>
+            <span>수정일 ${escapeHtml(formatProjectDateTime(projectItem.updatedAt))}</span>
+          </span>
+        </button>
+      `;
+    })
+    .join("");
+
+  setProjectListStatus(`${projectItems.length}개의 프로젝트가 있습니다.`, "success");
+}
+
+/**
+ * 프로젝트 목록 모달을 열고 서버 목록을 새로 조회한다.
+ */
+async function openProjectListModal() {
+  if (!projectListModal || !projectList) {
+    return;
+  }
+
+  lastFocusedElement = document.activeElement;
+  projectListModal.hidden = false;
+  document.body.classList.add("modal-open");
+  projectList.innerHTML = "";
+  setProjectListStatus("프로젝트 목록을 불러오는 중입니다...", "loading");
+
+  try {
+    const projectItems = await fetchProjectList();
+    renderProjectList(projectItems);
+
+    const firstProjectButton = projectList.querySelector(".project-list-item");
+
+    if (firstProjectButton) {
+      firstProjectButton.focus();
+    }
+  } catch (error) {
+    setProjectListStatus(
+      error instanceof Error ? error.message : "프로젝트 목록을 불러오지 못했습니다.",
+      "error"
+    );
+  }
+}
+
+/**
+ * 프로젝트 목록 모달을 닫고 이전 포커스로 되돌린다.
+ */
+function closeProjectListModal() {
+  if (!projectListModal) {
+    return;
+  }
+
+  projectListModal.hidden = true;
+  document.body.classList.remove("modal-open");
+
+  if (lastFocusedElement instanceof HTMLElement) {
+    lastFocusedElement.focus();
+  }
+}
+
+/**
  * 특정 장면의 이미지 상태만 부분 갱신한다.
  */
 function updateSceneImageState(sceneIndex, nextState) {
@@ -408,6 +547,102 @@ function createProjectAssetWebPath(projectFolderName, relativeFilePath) {
 }
 
 /**
+ * 프로젝트 파일 URL을 프로젝트 안의 상대 파일 경로로 바꾼다.
+ */
+function createProjectRelativePathFromWebPath(projectFolderName, webPath) {
+  const normalizedFolderName = String(projectFolderName || "").trim();
+  const normalizedWebPath = String(webPath || "").trim();
+  const projectPathPrefix = `/projects/${encodeURIComponent(normalizedFolderName)}/`;
+
+  if (!normalizedFolderName || !normalizedWebPath.startsWith(projectPathPrefix)) {
+    return "";
+  }
+
+  return normalizedWebPath
+    .slice(projectPathPrefix.length)
+    .split("/")
+    .filter(Boolean)
+    .map((pathSegment) => decodeURIComponent(pathSegment))
+    .join("/");
+}
+
+/**
+ * DB에 저장된 프로젝트 장면 결과를 조회한다.
+ */
+async function fetchProjectSceneResults(projectFolderName, projectId) {
+  const normalizedFolderName = String(projectFolderName || "").trim();
+  const normalizedProjectId = String(projectId || "").trim();
+
+  if (!normalizedFolderName && !normalizedProjectId) {
+    return [];
+  }
+
+  const queryParams = new URLSearchParams();
+  if (normalizedProjectId) {
+    queryParams.set("projectId", normalizedProjectId);
+  }
+  if (normalizedFolderName) {
+    queryParams.set("projectFolderName", normalizedFolderName);
+  }
+
+  const response = await window.fetch(`/api/scene-results?${queryParams.toString()}`);
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const responseData = await response.json();
+  return Array.isArray(responseData.results) ? responseData.results : [];
+}
+
+/**
+ * DB에 저장된 이미지와 영상 URL 상태를 장면 데이터에 합친다.
+ */
+function mergeProjectDbSceneResults(sceneItems, projectFolderName, sceneResults) {
+  if (!Array.isArray(sceneResults) || sceneResults.length === 0) {
+    return sceneItems.map((sceneItem) => normalizeSceneItem(sceneItem));
+  }
+
+  return sceneItems.map((sceneItem, sceneIndex) => {
+    const matchedImageResult = sceneResults.find(
+      (sceneResult) => sceneResult?.sceneIndex === sceneIndex && sceneResult?.resultType === "image"
+    );
+    const matchedVideoResult = sceneResults.find(
+      (sceneResult) => sceneResult?.sceneIndex === sceneIndex && sceneResult?.resultType === "video"
+    );
+    const nextSceneItem = { ...sceneItem };
+
+    if (matchedImageResult) {
+      nextSceneItem.imageStatus = matchedImageResult.status || nextSceneItem.imageStatus;
+      nextSceneItem.imageError = matchedImageResult.errorMessage || "";
+
+      if (matchedImageResult.url) {
+        nextSceneItem.generatedImageDataUrl = "";
+        nextSceneItem.generatedImageWebPath = matchedImageResult.url;
+        nextSceneItem.generatedImagePath = createProjectRelativePathFromWebPath(projectFolderName, matchedImageResult.url);
+      } else {
+        nextSceneItem.generatedImageDataUrl = "";
+        nextSceneItem.generatedImageWebPath = "";
+        nextSceneItem.generatedImagePath = "";
+      }
+    }
+
+    if (matchedVideoResult) {
+      nextSceneItem.videoStatus = matchedVideoResult.status || nextSceneItem.videoStatus;
+      nextSceneItem.videoError = matchedVideoResult.errorMessage || "";
+
+      if (matchedVideoResult.url) {
+        nextSceneItem.generatedVideoWebPath = matchedVideoResult.url;
+      } else {
+        nextSceneItem.generatedVideoWebPath = "";
+      }
+    }
+
+    return normalizeSceneItem(nextSceneItem);
+  });
+}
+
+/**
  * 서버에 저장된 스크립트 JSON 파일을 읽어 장면 데이터를 복원한다.
  */
 async function readProjectScriptFile(projectPayload) {
@@ -521,6 +756,38 @@ function collectScenesFromMarkup() {
 }
 
 /**
+ * 프로젝트 상태와 장면 데이터를 화면 입력값, 카드, 결과 상태에 반영한다.
+ */
+function restoreProjectToScreen(projectPayload, sceneItems, options = {}) {
+  const normalizedProjectPayload = projectPayload && typeof projectPayload === "object" ? projectPayload : {};
+  const projectFolderName = typeof normalizedProjectPayload.projectFolderName === "string"
+    ? normalizedProjectPayload.projectFolderName
+    : "";
+  const projectId = typeof normalizedProjectPayload.projectId === "string"
+    ? normalizedProjectPayload.projectId
+    : "";
+  const mergedSceneItems = mergeProjectDbSceneResults(
+    sceneItems,
+    projectFolderName,
+    Array.isArray(options.sceneResults) ? options.sceneResults : []
+  );
+  const fallbackProjectName = typeof options.fallbackProjectName === "string" ? options.fallbackProjectName : "";
+  const projectName = typeof normalizedProjectPayload.projectTopic === "string" && normalizedProjectPayload.projectTopic.trim()
+    ? normalizedProjectPayload.projectTopic.trim()
+    : fallbackProjectName;
+
+  syncScriptSettingsFromProject(normalizedProjectPayload);
+  syncCurrentProjectInfo(projectName, projectFolderName, projectId);
+  renderSceneCards(mergedSceneItems);
+  activateTab("script");
+
+  setSceneStatus(
+    options.message || `${projectName || "선택한"} 프로젝트의 장면 ${mergedSceneItems.length}개와 이미지·영상 상태를 불러왔습니다.`,
+    options.status || "success"
+  );
+}
+
+/**
  * 사용자가 선택한 프로젝트 파일을 읽어 장면 카드와 입력값을 복원한다.
  */
 async function importProjectFile(fileObject) {
@@ -541,38 +808,98 @@ async function importProjectFile(fileObject) {
     }
 
     const projectFileKind = detectProjectFileKind(projectPayload);
-    const sceneItems = projectFileKind === "project-state"
+    const fileSceneItems = projectFileKind === "project-state"
       ? mergeProjectImageState(await readProjectScriptFile(projectPayload), projectPayload)
       : validateProjectFilePayload(projectPayload);
-
-    syncScriptSettingsFromProject(projectPayload);
-    syncCurrentProjectInfo(
-      projectPayload.projectTopic || fileObject.name,
-      typeof projectPayload.projectFolderName === "string" ? projectPayload.projectFolderName : ""
-    );
-    renderSceneCards(sceneItems);
-    activateTab("script");
-
+    const dbSceneResults = await fetchProjectSceneResults(projectPayload.projectFolderName, projectPayload.projectId);
     const projectName = typeof projectPayload.projectTopic === "string" && projectPayload.projectTopic.trim()
       ? projectPayload.projectTopic.trim()
       : fileObject.name;
     const hasRestorableMediaState = projectFileKind === "project-state" || projectFileKind === "legacy-project-state";
 
-    setSceneStatus(
-      hasRestorableMediaState
-        ? `${projectName} 프로젝트의 장면 ${sceneItems.length}개와 이미지·영상 상태를 불러왔습니다.`
+    restoreProjectToScreen(projectPayload, fileSceneItems, {
+      fallbackProjectName: projectName,
+      sceneResults: dbSceneResults,
+      message: hasRestorableMediaState
+        ? `${projectName} 프로젝트의 장면 ${fileSceneItems.length}개와 이미지·영상 상태를 불러왔습니다.`
         : `${projectName} 스크립트 파일을 불러왔습니다. 이 파일에는 이미지·영상 복원 상태가 없어 탭은 기본 상태로 표시됩니다.`,
-      hasRestorableMediaState ? "success" : "loading"
-    );
+      status: hasRestorableMediaState ? "success" : "loading",
+    });
   } catch (error) {
     setSceneStatus(
       error instanceof Error ? error.message : "프로젝트 파일을 불러오지 못했습니다.",
       "error"
     );
-  } finally {
-    if (projectFileInput) {
-      projectFileInput.value = "";
+  }
+}
+
+/**
+ * 서버 DB 목록에서 선택한 프로젝트를 읽어 장면 카드와 입력값을 복원한다.
+ */
+async function importServerProject(projectFolderName, projectId) {
+  const normalizedProjectFolderName = String(projectFolderName || "").trim();
+  const normalizedProjectId = String(projectId || "").trim();
+
+  if (!normalizedProjectFolderName && !normalizedProjectId) {
+    return;
+  }
+
+  setSceneStatus("서버에 저장된 프로젝트를 불러오는 중입니다...", "loading");
+  setProjectListStatus("프로젝트를 불러오는 중입니다...", "loading");
+
+  try {
+    const queryParams = new URLSearchParams();
+    if (normalizedProjectId) {
+      queryParams.set("projectId", normalizedProjectId);
     }
+    if (normalizedProjectFolderName) {
+      queryParams.set("projectFolderName", normalizedProjectFolderName);
+    }
+
+    const response = await window.fetch(`/api/project?${queryParams.toString()}`);
+    const responseData = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(responseData.error || "프로젝트를 불러오지 못했습니다.");
+    }
+
+    const projectPayload = responseData.projectState && typeof responseData.projectState === "object"
+      ? responseData.projectState
+      : {};
+    const scriptPayload = responseData.script && typeof responseData.script === "object"
+      ? responseData.script
+      : {};
+    const projectItem = responseData.project && typeof responseData.project === "object" ? responseData.project : {};
+    const scriptSceneItems = validateProjectFilePayload(scriptPayload);
+    const fileSceneItems = mergeProjectImageState(scriptSceneItems, projectPayload);
+    const projectName = typeof projectItem.name === "string" && projectItem.name.trim()
+      ? projectItem.name.trim()
+      : normalizedProjectFolderName;
+
+    restoreProjectToScreen(
+      {
+        ...scriptPayload,
+        ...projectPayload,
+        projectId: projectPayload.projectId || projectItem.projectId || normalizedProjectId,
+        projectTopic: projectPayload.projectTopic || projectItem.topic || projectName,
+        projectFolderName: projectPayload.projectFolderName || projectItem.folderName || normalizedProjectFolderName,
+        tone: projectPayload.tone || projectItem.tone || scriptPayload.tone || "",
+        style: projectPayload.style || projectItem.style || scriptPayload.style || "",
+        sceneCount: projectPayload.sceneCount || projectItem.sceneCount || scriptSceneItems.length,
+      },
+      fileSceneItems,
+      {
+        fallbackProjectName: projectName,
+        sceneResults: Array.isArray(responseData.sceneResults) ? responseData.sceneResults : [],
+        message: `${projectName} 프로젝트의 장면 ${scriptSceneItems.length}개와 이미지·영상 상태를 불러왔습니다.`,
+        status: "success",
+      }
+    );
+    closeProjectListModal();
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "프로젝트를 불러오지 못했습니다.";
+    setProjectListStatus(errorMessage, "error");
+    setSceneStatus(errorMessage, "error");
   }
 }
 
@@ -804,15 +1131,6 @@ function escapeHtml(textValue) {
 }
 
 /**
- * 이미지 생성 응답의 base64 결과를 data URL로 변환한다.
- */
-function createImageDataUrl(imageBase64, outputFormat) {
-  const normalizedFormat = outputFormat === "jpeg" ? "jpeg" : "png";
-
-  return `data:image/${normalizedFormat};base64,${imageBase64}`;
-}
-
-/**
  * 특정 장면의 영상을 EvoLink Kling API로 생성하고 카드 상태를 갱신한다.
  */
 async function generateVideoForScene(sceneIndex) {
@@ -860,7 +1178,7 @@ async function generateVideoForScene(sceneIndex) {
     return;
   }
 
-  syncCurrentProjectInfo(activeTopic, currentProjectInfo.folderName);
+  syncCurrentProjectInfo(activeTopic, currentProjectInfo.folderName, currentProjectInfo.projectId);
   updateSceneVideoState(sceneIndex, {
     videoStatus: "loading",
     videoError: "",
@@ -874,6 +1192,7 @@ async function generateVideoForScene(sceneIndex) {
       },
       body: JSON.stringify({
         topic: activeTopic,
+        projectId: currentProjectInfo.projectId,
         projectFolderName: currentProjectInfo.folderName,
         sceneIndex,
         videoPrompt: sceneItem.videoPrompt,
@@ -892,13 +1211,27 @@ async function generateVideoForScene(sceneIndex) {
     }
 
     if (!response.ok) {
-      throw new Error(responseData.error || "영상 생성에 실패했습니다.");
+      const failedProjectId = responseData.projectId ? `프로젝트 ${responseData.projectId}` : "현재 프로젝트";
+      const failedSceneNumber = Number.isInteger(responseData.sceneIndex) ? responseData.sceneIndex + 1 : sceneIndex + 1;
+      throw new Error(`${failedProjectId} SCENE ${String(failedSceneNumber).padStart(2, "0")} 영상 생성 실패: ${responseData.error || "영상 생성에 실패했습니다."}`);
     }
 
-    const generatedVideoWebPath = typeof responseData.video?.webPath === "string" ? responseData.video.webPath : "";
+    const generatedVideoWebPath = typeof responseData.video?.dbUrl === "string"
+      ? responseData.video.dbUrl
+      : typeof responseData.video?.webPath === "string"
+        ? responseData.video.webPath
+        : "";
 
     if (!generatedVideoWebPath) {
       throw new Error("생성된 영상 URL을 읽지 못했습니다.");
+    }
+
+    if (responseData.project) {
+      syncCurrentProjectInfo(
+        activeTopic,
+        typeof responseData.project.folderName === "string" ? responseData.project.folderName : currentProjectInfo.folderName,
+        typeof responseData.project.projectId === "string" ? responseData.project.projectId : currentProjectInfo.projectId
+      );
     }
 
     updateSceneVideoState(sceneIndex, {
@@ -956,7 +1289,7 @@ async function generateImageForScene(sceneIndex) {
     return;
   }
 
-  syncCurrentProjectInfo(activeTopic, currentProjectInfo.folderName);
+  syncCurrentProjectInfo(activeTopic, currentProjectInfo.folderName, currentProjectInfo.projectId);
   updateSceneImageState(sceneIndex, {
     imageStatus: "loading",
     imageError: "",
@@ -970,6 +1303,7 @@ async function generateImageForScene(sceneIndex) {
       },
       body: JSON.stringify({
         topic: activeTopic,
+        projectId: currentProjectInfo.projectId,
         projectFolderName: currentProjectInfo.folderName,
         sceneIndex,
         imagePrompt: sceneItem.imagePrompt,
@@ -987,22 +1321,34 @@ async function generateImageForScene(sceneIndex) {
     }
 
     if (!response.ok) {
-      throw new Error(responseData.error || "이미지 생성에 실패했습니다.");
+      const failedProjectId = responseData.projectId ? `프로젝트 ${responseData.projectId}` : "현재 프로젝트";
+      const failedSceneNumber = Number.isInteger(responseData.sceneIndex) ? responseData.sceneIndex + 1 : sceneIndex + 1;
+      throw new Error(`${failedProjectId} SCENE ${String(failedSceneNumber).padStart(2, "0")} 이미지 생성 실패: ${responseData.error || "이미지 생성에 실패했습니다."}`);
     }
 
-    const generatedImageBase64 = typeof responseData.image?.base64 === "string" ? responseData.image.base64 : "";
-    const outputFormat = typeof responseData.image?.outputFormat === "string" ? responseData.image.outputFormat : "png";
     const generatedImagePath = typeof responseData.image?.filePath === "string" ? responseData.image.filePath : "";
-    const generatedImageWebPath = typeof responseData.image?.webPath === "string" ? responseData.image.webPath : "";
+    const generatedImageWebPath = typeof responseData.image?.dbUrl === "string"
+      ? responseData.image.dbUrl
+      : typeof responseData.image?.webPath === "string"
+        ? responseData.image.webPath
+        : "";
 
-    if (!generatedImageBase64) {
-      throw new Error("생성된 이미지 데이터를 읽지 못했습니다.");
+    if (!generatedImageWebPath) {
+      throw new Error("생성된 이미지 URL을 읽지 못했습니다.");
+    }
+
+    if (responseData.project) {
+      syncCurrentProjectInfo(
+        activeTopic,
+        typeof responseData.project.folderName === "string" ? responseData.project.folderName : currentProjectInfo.folderName,
+        typeof responseData.project.projectId === "string" ? responseData.project.projectId : currentProjectInfo.projectId
+      );
     }
 
     updateSceneImageState(sceneIndex, {
       imageStatus: "success",
       imageError: "",
-      generatedImageDataUrl: createImageDataUrl(generatedImageBase64, outputFormat),
+      generatedImageDataUrl: "",
       generatedImagePath,
       generatedImageWebPath,
     });
@@ -1068,7 +1414,8 @@ async function generateScenesFromApi() {
     const generatedScenes = Array.isArray(responseData.scenes) ? responseData.scenes : [];
     syncCurrentProjectInfo(
       scriptPayload.topic,
-      typeof responseData.project?.folderName === "string" ? responseData.project.folderName : ""
+      typeof responseData.project?.folderName === "string" ? responseData.project.folderName : "",
+      typeof responseData.project?.projectId === "string" ? responseData.project.projectId : ""
     );
     renderSceneCards(generatedScenes);
     setSceneStatus(`${generatedScenes.length}개의 장면 스크립트를 생성했습니다.`, "success");
@@ -1164,23 +1511,29 @@ if (videoSceneRail) {
   });
 }
 
-if (openProjectFileButton && projectFileInput) {
+if (openProjectFileButton) {
   openProjectFileButton.addEventListener("click", () => {
-    projectFileInput.click();
+    openProjectListModal();
   });
 }
 
-if (projectFileInput) {
-  projectFileInput.addEventListener("change", () => {
-    const selectedFile = projectFileInput.files?.[0];
+if (projectList) {
+  projectList.addEventListener("click", (event) => {
+    const projectButton = event.target instanceof HTMLElement
+      ? event.target.closest("[data-project-folder-name]")
+      : null;
 
-    if (!selectedFile) {
+    if (!projectButton) {
       return;
     }
 
-    importProjectFile(selectedFile);
+    importServerProject(projectButton.dataset.projectFolderName, projectButton.dataset.projectId);
   });
 }
+
+closeProjectListModalButtons.forEach((button) => {
+  button.addEventListener("click", closeProjectListModal);
+});
 
 if (openApiKeyModalButton) {
   openApiKeyModalButton.addEventListener("click", openApiKeyModal);

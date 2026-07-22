@@ -244,7 +244,38 @@
       </section>
     </main>
 
-    <input type="file" id="project-file-input" accept=".json,application/json" hidden />
+    <div class="modal-layer" id="project-list-modal" hidden>
+      <div class="modal-backdrop" data-close-project-list-modal></div>
+      <section
+        class="project-list-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="project-list-modal-title"
+        aria-describedby="project-list-modal-description"
+      >
+        <header class="project-list-modal__header">
+          <div class="project-list-modal__title-group">
+            <span class="project-list-modal__title-icon" aria-hidden="true">↓</span>
+            <div>
+              <h2 class="project-list-modal__title" id="project-list-modal-title">프로젝트 불러오기</h2>
+              <p class="project-list-modal__description" id="project-list-modal-description">서버에 저장된 프로젝트를 선택하세요.</p>
+            </div>
+          </div>
+          <button type="button" class="project-list-modal__close" aria-label="프로젝트 불러오기 창 닫기" data-close-project-list-modal>
+            ×
+          </button>
+        </header>
+
+        <div class="project-list-modal__body">
+          <p class="project-list-modal__status" id="project-list-status" data-status="loading">프로젝트 목록을 불러오는 중입니다...</p>
+          <div class="project-list" id="project-list" aria-label="저장된 프로젝트 목록"></div>
+        </div>
+
+        <footer class="project-list-modal__footer">
+          <button type="button" class="modal-action-button" data-close-project-list-modal>취소</button>
+        </footer>
+      </section>
+    </div>
 
     <div class="modal-layer" id="api-key-modal" hidden>
       <div class="modal-backdrop" data-close-api-modal></div>
@@ -363,6 +394,6 @@
         </footer>
       </section>
     </div>
-    <script src="/scripts/main.js"></script>
+    <script src="/scripts/main.js?v=20260721-0118"></script>
   </body>
 </html>
